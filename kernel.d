@@ -28,6 +28,89 @@ void putchar(char ch)
     sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
 }
 
+alias va_list = imported!"core.stdc.stdarg".va_list;
+alias va_start = imported!"core.stdc.stdarg".va_start;
+alias va_end = imported!"core.stdc.stdarg".va_end;
+alias va_arg = imported!"core.stdc.stdarg".va_arg;
+
+void printf(const(char)* fmt, ...)
+{
+    va_list vargs;
+    va_start(vargs, fmt);
+
+    while (*fmt)
+    {
+        if (*fmt == '%')
+        {
+            fmt++;
+            switch (*fmt)
+            {
+            case '\0':
+                putchar('%');
+                goto end;
+            case '%':
+                putchar('%');
+                break;
+            case 's':
+            {
+                const(char)* s = va_arg!(const(char)*)(vargs);
+                while (*s)
+                {
+                    putchar(*s);
+                    s++;
+                }
+                break;
+            }
+            case 'd':
+            {
+                int value = va_arg!int(vargs);
+                if (value < 0)
+                {
+                    putchar('-');
+                    value = -value;
+                }
+
+                int divisor = 1;
+                while (value / divisor > 9)
+                {
+                    divisor *= 10;
+                }
+
+                while (divisor > 0)
+                {
+                    putchar('0' + value / divisor);
+                    value %= divisor;
+                    divisor /= 10;
+                }
+
+                break;
+            }
+            case 'x':
+            {
+                int value = va_arg!int(vargs);
+                for (int i = 7; i >= 0; i--)
+                {
+                    int nibble = (value >> (i * 4)) & 0xf;
+                    putchar("0123456789abcdef"[nibble]);
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
+        else
+        {
+            putchar(*fmt);
+        }
+
+        fmt++;
+    }
+
+end:
+    va_end(vargs);
+}
+
 void* memset(void* buf, char c, size_t n)
 {
     char* p = cast(char*) buf;
@@ -41,10 +124,8 @@ void* memset(void* buf, char c, size_t n)
 void kernel_main()
 {
     memset(__bss, 0, cast(size_t) __bss_end - cast(size_t) __bss);
-    const(char)* s = "\n\nHello World!\n";
-    for (int i = 0; s[i] != '\0'; i++) {
-        putchar(s[i]);
-    }
+    printf("\n\nHello, World!\n");
+    printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
     for (;;)
     {
         __asm("wfi", "");
