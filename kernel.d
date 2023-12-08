@@ -1,6 +1,8 @@
 import ldc.attributes;
 import ldc.llvmasm;
 
+import common;
+
 extern (C):
 
 extern __gshared char* __bss;
@@ -111,19 +113,9 @@ end:
     va_end(vargs);
 }
 
-void* memset(void* buf, char c, size_t n)
-{
-    char* p = cast(char*) buf;
-    while (n--)
-    {
-        *p++ = c;
-    }
-    return buf;
-}
-
 void kernel_main()
 {
-    memset(__bss, 0, cast(size_t) __bss_end - cast(size_t) __bss);
+    memset(__bss, 0, cast(size_t) &__bss_end - cast(size_t) &__bss);
     printf("\n\nHello, World!\n");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
     for (;;)
