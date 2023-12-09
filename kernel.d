@@ -255,14 +255,43 @@ align(4) @naked void kernel_entry()
     `, "");
 }
 
+extern __gshared char* __free_ram;
+extern __gshared char* __free_ram_end;
+
+alias paddr_t = uint;
+alias vaddr_t = uint;
+
+enum PAGE_SIZE = 4096;
+
+__gshared paddr_t next_paddr = 0;
+
+paddr_t alloc_pages(uint n)
+{
+    if (next_paddr == 0)
+    {
+        next_paddr = cast(paddr_t) &__free_ram;
+    }
+    paddr_t paddr = next_paddr;
+    next_paddr += n * PAGE_SIZE;
+
+    if (next_paddr > cast(paddr_t) &__free_ram_end)
+    {
+        panic!("Out of memory");
+    }
+
+    memset(cast(void*) paddr, 0, n * PAGE_SIZE);
+    return paddr;
+}
+
 void kernel_main()
 {
-    memset(__bss, 0, cast(size_t) &__bss_end - cast(size_t) &__bss);
     printf("\n\nHello, World!\n");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
 
-    WRITE_CSR!"stvec"(&kernel_entry);
-    __asm("unimp", "");
+    paddr_t paddr0 = alloc_pages(2);
+    paddr_t paddr1 = alloc_pages(1);
+    printf("alloc_pages test: paddr0=%x\n", paddr0);
+    printf("alloc_pages test: paddr1=%x\n", paddr1);
 
     panic!("booted!");
     printf("unreachable here!\n");
