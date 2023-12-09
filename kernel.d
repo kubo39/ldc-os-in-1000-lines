@@ -113,11 +113,21 @@ end:
     va_end(vargs);
 }
 
+void panic(string fmt)()
+{
+    printf("PANIC: %s:%d: " ~ fmt ~ "\n", __FILE__.ptr, __LINE__);
+    for (;;) {}
+}
+
 void kernel_main()
 {
     memset(__bss, 0, cast(size_t) &__bss_end - cast(size_t) &__bss);
     printf("\n\nHello, World!\n");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
+
+    panic!("booted!");
+    printf("unreachable here!\n");
+
     for (;;)
     {
         __asm("wfi", "");
