@@ -5,7 +5,7 @@ QEMU=qemu-system-riscv32
 
 LDC=ldc2
 
-DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m -O2 --betterC --defaultlib= -relocation-model=static -gcc=clang"
+DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m -O2 --betterC --defaultlib= -relocation-model=static -g -gcc=clang"
 
 # カーネルをビルド
 $LDC $DFLAGS -Xcc=--target=riscv32 -Xcc=-march=rv32im -Xcc=-ffreestanding -Xcc=-nostdlib -Xcc=-Wl,-Tkernel.ld -Xcc=-Wl,-Map=kernel.Map -of=kernel.elf \
