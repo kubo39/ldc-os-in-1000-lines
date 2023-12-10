@@ -283,10 +283,145 @@ paddr_t alloc_pages(uint n)
     return paddr;
 }
 
+enum PROC_MAX = 8;   // 最大プロセス数
+enum PROC_UNUSED = 0;   // 未使用のプロセス管理構造体
+enum PROC_RUNNABLE = 1;   // 実行可能なプロセス
+
+struct process
+{
+    int pid;
+    int state;
+    vaddr_t sp; // コンテキストスイッチ時のスタックポインタ
+    ubyte[8192] stack; // カーネルスタック
+}
+
+__gshared process[PROC_MAX] procs;
+
+@naked void switch_context(uint* prev_sp, uint* next_sp)
+{
+    pragma(inline, false);
+    __asm(`
+        addi sp, sp, -13 * 4
+        sw ra,  0  * 4(sp)
+        sw s0,  1  * 4(sp)
+        sw s1,  2  * 4(sp)
+        sw s2,  3  * 4(sp)
+        sw s3,  4  * 4(sp)
+        sw s4,  5  * 4(sp)
+        sw s5,  6  * 4(sp)
+        sw s6,  7  * 4(sp)
+        sw s7,  8  * 4(sp)
+        sw s8,  9  * 4(sp)
+        sw s9,  10 * 4(sp)
+        sw s10, 11 * 4(sp)
+        sw s11, 12 * 4(sp)
+        sw sp, (a0)
+        lw sp, (a1)
+        lw ra,  0  * 4(sp)
+        lw s0,  1  * 4(sp)
+        lw s1,  2  * 4(sp)
+        lw s2,  3  * 4(sp)
+        lw s3,  4  * 4(sp)
+        lw s4,  5  * 4(sp)
+        lw s5,  6  * 4(sp)
+        lw s6,  7  * 4(sp)
+        lw s7,  8  * 4(sp)
+        lw s8,  9  * 4(sp)
+        lw s9,  10 * 4(sp)
+        lw s10, 11 * 4(sp)
+        lw s11, 12 * 4(sp)
+        addi sp, sp, 13 * 4
+        ret
+    `, "");
+}
+
+process* create_process(uint pc)
+{
+    process* proc = null;
+    int i;
+    for (i = 0; i < PROC_MAX; i++)
+    {
+        if (procs[i].state == PROC_UNUSED)
+        {
+            proc = &procs[i];
+            break;
+        }
+    }
+
+    if (!proc)
+    {
+        panic!("No free process slots");
+    }
+
+    // switch_context() で復帰できるように、
+    // スタックに呼び出し先保存レジスタを積む
+    uint* sp = cast(uint*) &(proc.stack[proc.stack.sizeof - 1]);
+    *--sp = 0;     // s11
+    *--sp = 0;     // s10
+    *--sp = 0;     // s9
+    *--sp = 0;     // s8
+    *--sp = 0;     // s7
+    *--sp = 0;     // s6
+    *--sp = 0;     // s5
+    *--sp = 0;     // s4
+    *--sp = 0;     // s3
+    *--sp = 0;     // s2
+    *--sp = 0;     // s1
+    *--sp = 0;     // s0
+    *--sp = pc;    // ra
+
+    // 各フィールドを初期化
+    proc.pid = i + 1;
+    proc.state = PROC_RUNNABLE;
+    proc.sp = cast(uint) sp;
+    return proc;
+}
+
+__gshared process* proc_a;
+__gshared process* proc_b;
+
+void proc_a_entry()
+{
+    printf("starting process A\n");
+    while (true)
+    {
+        putchar('A');
+        switch_context(&proc_a.sp, &proc_b.sp);
+
+        foreach (i; 0 .. 30000000)
+        {
+            __asm("nop", "");
+        }
+    }
+}
+
+void proc_b_entry()
+{
+    printf("starting process B\n");
+    while (true)
+    {
+        putchar('B');
+        switch_context(&proc_b.sp, &proc_a.sp);
+
+        foreach (i; 0 .. 30000000)
+        {
+            __asm("nop", "");
+        }
+    }
+}
+
 void kernel_main()
 {
     printf("\n\nHello, World!\n");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
+
+    WRITE_CSR!"stvec"(&kernel_entry);
+
+    proc_a = create_process(cast(uint) &proc_a_entry);
+    proc_b = create_process(cast(uint) &proc_b_entry);
+    proc_a_entry();
+
+    printf("unreachable here!\n");
 
     paddr_t paddr0 = alloc_pages(2);
     paddr_t paddr1 = alloc_pages(1);
