@@ -16,4 +16,5 @@ $QEMU -machine virt \
     -bios default \
     -nographic \
     -serial mon:stdio --no-reboot \
+    -d unimp,guest_errors,int,cpu_reset -D qemu.log \
     -kernel kernel.elf

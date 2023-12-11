@@ -269,7 +269,7 @@ extern __gshared char* __free_ram_end;
 alias paddr_t = uint;
 alias vaddr_t = uint;
 
-enum PAGE_SIZE = 4096;
+enum uint PAGE_SIZE = 4096;
 
 __gshared paddr_t next_paddr = 0;
 
@@ -300,6 +300,7 @@ struct process
     int pid;
     int state;
     vaddr_t sp; // コンテキストスイッチ時のスタックポインタ
+    uint* page_table;
     ubyte[8192] stack; // カーネルスタック
 }
 
@@ -343,6 +344,8 @@ __gshared process[PROC_MAX] procs;
     `, "");
 }
 
+extern __gshared char* __kernel_base;
+
 process* create_process(uint pc)
 {
     process* proc = null;
@@ -378,10 +381,20 @@ process* create_process(uint pc)
     *--sp = 0;     // s0
     *--sp = pc;    // ra
 
+    uint* page_table = cast(uint*) alloc_pages(1);
+
+    // カーネルのページをマッピングする
+    for (paddr_t paddr = cast(paddr_t) &__kernel_base;
+         paddr < cast(paddr_t) &__free_ram_end; paddr += PAGE_SIZE)
+    {
+        map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+    }
+
     // 各フィールドを初期化
     proc.pid = i + 1;
     proc.state = PROC_RUNNABLE;
     proc.sp = cast(uint) sp;
+    proc.page_table = page_table;
     return proc;
 }
 
@@ -440,16 +453,55 @@ void yield()
     if (next == current_proc)
         return;
 
-    __asm(
-        "csrw sscratch, $0",
-        "r",
-        &next.stack[next.stack.sizeof-1]
-    );
-
     // コンテキストスイッチ
     process* prev = current_proc;
     current_proc = next;
+
+    __asm(`
+            sfence.vma
+            csrw satp, $0
+            sfence.vma
+            csrw sscratch, $1
+        `,
+        "r,r",
+        (SATP_SV32 | (cast(uint) next.page_table / PAGE_SIZE)),
+        &next.stack[next.stack.sizeof-1]
+    );
+
     switch_context(&prev.sp, &next.sp);
+}
+
+enum uint SATP_SV32 = 1 << 31;
+enum uint PAGE_V = 1 << 0;   // 有効化ビット
+enum uint PAGE_R = 1 << 1;   // 読み込み可能
+enum uint PAGE_W = 1 << 2;   // 書き込み可能
+enum uint PAGE_X = 1 << 3;   // 実行可能
+enum uint PAGE_U = 1 << 4;   // ユーザーモードでアクセス可能
+
+void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
+{
+    if ((vaddr & (PAGE_SIZE - 1)) != 0)
+    {
+        panic!("unaligned vaddr");
+    }
+
+    if ((paddr & (PAGE_SIZE - 1)) != 0)
+    {
+        panic!("unaligned paddr");
+    }
+
+    uint vpn1 = (vaddr >> 22) & 0x3ff;
+    if ((table1[vpn1] & PAGE_V) == 0)
+    {
+        // 2段目のページテーブルが存在しないので作成する
+        uint pt_paddr = alloc_pages(1);
+        table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
+    }
+
+    // 2段目のページテーブルにエントリを追加する
+    uint vpn0 = (vaddr >> 12) & 0x3ff;
+    uint* table0 = cast(uint*) ((table1[vpn1] >> 10) * PAGE_SIZE);
+    table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }
 
 void kernel_main()

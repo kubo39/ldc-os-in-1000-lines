@@ -2,3 +2,4 @@
 *.elf
 *.o
 *.Map
+*.log
