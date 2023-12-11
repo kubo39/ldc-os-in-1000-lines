@@ -181,7 +181,10 @@ void handle_trap(trap_frame* f)
 align(4) @naked void kernel_entry()
 {
     __asm(`
-        csrw sscratch, sp
+        # 実行中プロセスのカーネルスタックをsscratchから取り出す
+        # tmp = sp; sp = sscratch; sscratch = tmp;
+        csrrw sp, sscratch, sp
+
         addi sp, sp, -4 * 31
         sw ra,  4 * 0(sp)
         sw gp,  4 * 1(sp)
@@ -214,8 +217,13 @@ align(4) @naked void kernel_entry()
         sw s10, 4 * 28(sp)
         sw s11, 4 * 29(sp)
 
+        # 例外発生時のspを取り出して保存
         csrr a0, sscratch
         sw a0, 4 * 30(sp)
+
+        # カーネルスタックを設定し直す
+        addi a0, sp, 4 * 31
+        csrw sscratch, a0
 
         mv a0, sp
         call handle_trap
@@ -386,7 +394,7 @@ void proc_a_entry()
     while (true)
     {
         putchar('A');
-        switch_context(&proc_a.sp, &proc_b.sp);
+        yield();
 
         foreach (i; 0 .. 30000000)
         {
@@ -401,13 +409,47 @@ void proc_b_entry()
     while (true)
     {
         putchar('B');
-        switch_context(&proc_b.sp, &proc_a.sp);
+        yield();
 
         foreach (i; 0 .. 30000000)
         {
             __asm("nop", "");
         }
     }
+}
+
+__gshared process* current_proc; // 現在実行中のプロセス
+__gshared process *idle_proc;    // アイドルプロセス
+
+void yield()
+{
+    // 実行可能なプロセスを探す
+    process* next = idle_proc;
+    foreach (i; 0 .. PROC_MAX)
+    {
+        process* proc = &procs[(current_proc.pid + i) % PROC_MAX];
+        if (proc.state == PROC_RUNNABLE && proc.pid > 0)
+        {
+            next = proc;
+            break;
+        }
+    }
+
+    // 現在実行中のプロセス以外に、実行可能なプロセスがない。
+    // 戻って処理を続行する
+    if (next == current_proc)
+        return;
+
+    __asm(
+        "csrw sscratch, $0",
+        "r",
+        &next.stack[next.stack.sizeof-1]
+    );
+
+    // コンテキストスイッチ
+    process* prev = current_proc;
+    current_proc = next;
+    switch_context(&prev.sp, &next.sp);
 }
 
 void kernel_main()
@@ -417,11 +459,15 @@ void kernel_main()
 
     WRITE_CSR!"stvec"(&kernel_entry);
 
+    idle_proc = create_process(cast(uint) null);
+    idle_proc.pid = -1;
+    current_proc = idle_proc;
+
     proc_a = create_process(cast(uint) &proc_a_entry);
     proc_b = create_process(cast(uint) &proc_b_entry);
-    proc_a_entry();
 
-    printf("unreachable here!\n");
+    yield();
+    panic!("switched to idle process\n");
 
     paddr_t paddr0 = alloc_pages(2);
     paddr_t paddr1 = alloc_pages(1);
