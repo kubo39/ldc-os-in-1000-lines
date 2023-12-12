@@ -506,6 +506,7 @@ void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
 
 void kernel_main()
 {
+    memset(&__bss, 0, &__bss_end - &__bss);
     printf("\n\nHello, World!\n");
     printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
 
