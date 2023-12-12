@@ -25,4 +25,8 @@ SECTIONS {
 
        ASSERT(. < 0x1800000, "too large executable");
     }
+
+    /DISCARD/ : {
+        *(.eh_frame)
+    }
 }
