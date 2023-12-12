@@ -263,7 +263,7 @@ __gshared process[PROC_MAX] procs;
 
 extern __gshared char* __kernel_base;
 
-process* create_process(uint pc)
+process* create_process(const void* image, size_t image_size)
 {
     process* proc = null;
     int i;
@@ -296,7 +296,7 @@ process* create_process(uint pc)
     *--sp = 0;     // s2
     *--sp = 0;     // s1
     *--sp = 0;     // s0
-    *--sp = pc;    // ra
+    *--sp = cast(uint) &user_entry;    // ra
 
     uint* page_table = cast(uint*) alloc_pages(1);
 
@@ -305,6 +305,15 @@ process* create_process(uint pc)
          paddr < cast(paddr_t) &__free_ram_end; paddr += PAGE_SIZE)
     {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+    }
+
+    // ユーザーのページをマッピングする
+    for (uint off; off < image_size; off += PAGE_SIZE)
+    {
+        paddr_t page = alloc_pages(1);
+        memcpy(cast(void*) page, image + off, PAGE_SIZE);
+        map_page(page_table, USER_BASE + off, page,
+                 PAGE_U | PAGE_R | PAGE_W | PAGE_X);
     }
 
     // 各フィールドを初期化
@@ -421,6 +430,22 @@ void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
     table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }
 
+enum USER_BASE = 0x1000000;
+
+extern __gshared char* _binary_shell_bin_start;
+extern __gshared char* _binary_shell_bin_size;
+
+enum SSTATUS_SPIE = 1 << 5;
+
+@naked void user_entry()
+{
+    __asm(`
+        csrw sepc, $0
+        csrw sstatus, $1
+        sret
+    `, "r,r", USER_BASE, SSTATUS_SPIE);
+}
+
 void kernel_main()
 {
     memset(&__bss, 0, &__bss_end - &__bss);
@@ -429,12 +454,11 @@ void kernel_main()
 
     WRITE_CSR!"stvec"(&kernel_entry);
 
-    idle_proc = create_process(cast(uint) null);
+    idle_proc = create_process(null, 0);
     idle_proc.pid = -1;
     current_proc = idle_proc;
 
-    proc_a = create_process(cast(uint) &proc_a_entry);
-    proc_b = create_process(cast(uint) &proc_b_entry);
+    create_process(&_binary_shell_bin_start, cast(size_t) &_binary_shell_bin_size);
 
     yield();
     panic!("switched to idle process\n");
