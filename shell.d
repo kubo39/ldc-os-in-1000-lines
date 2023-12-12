@@ -1,7 +1,8 @@
 extern (C):
 
+import common;
+
 void main()
 {
-    *(cast(int*) 0x80200000) = 0x1234;
-    for (;;) {}
+    printf("Hello, World from shell!\n");
 }

@@ -1,6 +1,10 @@
 module common;
 
+import ldc.llvmasm;
+
 extern (C):
+
+enum SYS_PUTCHAR = 1;
 
 alias va_list = imported!"core.stdc.stdarg".va_list;
 alias va_start = imported!"core.stdc.stdarg".va_start;

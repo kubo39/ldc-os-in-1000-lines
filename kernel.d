@@ -82,17 +82,41 @@ void WRITE_CSR(string reg)(void* value)
     __asm("csrw " ~ reg ~ ", $0", "r", value);
 }
 
+enum SCAUSE_ECALL = 8;
+
 void handle_trap(trap_frame* f)
 {
     uint scause = READ_CSR!("scause", uint)();
     uint stval = READ_CSR!("stval", uint)();
     uint user_pc = READ_CSR!("sepc", uint)();
 
-    printf("scause: %x\n", scause);
-    printf("stval: %x\n", stval);
-    printf("user_pc: %x\n", user_pc);
+    if (scause == SCAUSE_ECALL)
+    {
+        handle_syscall(f);
+        user_pc += 4;
+    }
+    else
+    {
+        printf("scause: %x\n", scause);
+        printf("stval: %x\n", stval);
+        printf("user_pc: %x\n", user_pc);
 
-    panic!("unexpected trap");
+        panic!("unexpected trap");
+    }
+
+    WRITE_CSR!("sepc")(cast(void*)user_pc);
+}
+
+void handle_syscall(trap_frame* f)
+{
+    switch (f.a3)
+    {
+    case SYS_PUTCHAR:
+        putchar(cast(char) f.a0);
+        break;
+    default:
+        panic!("unexpected syscall");
+    }
 }
 
 align(4) @naked void kernel_entry()
