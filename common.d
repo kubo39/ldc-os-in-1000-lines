@@ -5,6 +5,7 @@ import ldc.llvmasm;
 extern (C):
 
 enum SYS_PUTCHAR = 1;
+enum SYS_GETCHAR = 2;
 
 alias va_list = imported!"core.stdc.stdarg".va_list;
 alias va_start = imported!"core.stdc.stdarg".va_start;
@@ -12,6 +13,7 @@ alias va_end = imported!"core.stdc.stdarg".va_end;
 alias va_arg = imported!"core.stdc.stdarg".va_arg;
 
 void putchar(char);
+int getchar();
 
 void printf(const(char)* fmt, ...)
 {
@@ -112,6 +114,21 @@ void* memcpy(void* dst, const(void)* src, size_t n)
     return dst;
 }
 
+int memcmp(const void* s1, const void* s2, size_t n)
+{
+    const ubyte* x = cast(const ubyte*) s1;
+    const ubyte* y = cast(const ubyte*) s2;
+    int i;
+    for (i = 0; i < n; i++)
+    {
+        if (x[i] != y[i])
+        {
+            break;
+        }
+    }
+    return x[i] - y[i];
+}
+
 char* strcpy(char* dst, const(char)* src)
 {
     char* d = dst;
@@ -135,5 +152,5 @@ int strcmp(const(char)* s1, const(char)* s2)
         s2++;
     }
 
-    return *(cast(char*)s1) - *(cast(char*)s2);
+    return *s1 - *s2;
 }

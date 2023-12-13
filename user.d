@@ -26,6 +26,11 @@ void putchar(char ch)
     syscall(SYS_PUTCHAR, ch, 0, 0);
 }
 
+int getchar()
+{
+    return syscall(SYS_GETCHAR, 0, 0, 0);
+}
+
 @section(".text.start")
 @naked void start()
 {

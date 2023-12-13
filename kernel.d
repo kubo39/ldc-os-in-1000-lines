@@ -11,13 +11,14 @@ extern __gshared char* __stack_top;
 
 struct sbiret
 {
-    long error;
-    long value;
+    int error;
+    int value;
 }
 
 sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                 long arg5, long fid, long eid)
 {
+    pragma(inline, true);
     return __asm!sbiret(
         "ecall",
         "={a0},={a1},{a0},{a1},{a2},{a3},{a4},{a5},{a6},{a7},~{memory}",
@@ -28,6 +29,13 @@ sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
 void putchar(char ch)
 {
     sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
+}
+
+long getchar()
+{
+    pragma(inline, false);
+    sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+    return ret.error;
 }
 
 void panic(string fmt)()
@@ -113,6 +121,19 @@ void handle_syscall(trap_frame* f)
     {
     case SYS_PUTCHAR:
         putchar(cast(char) f.a0);
+        break;
+    case SYS_GETCHAR:
+        while (true)
+        {
+            long ch = getchar();
+            if (ch >= 0)
+            {
+                f.a0 = cast(uint) ch;
+                break;
+            }
+
+            yield();
+        }
         break;
     default:
         panic!("unexpected syscall");
