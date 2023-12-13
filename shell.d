@@ -9,7 +9,6 @@ void main()
 prompt:
         printf("> ");
         char[8] cmdline;
-        memset(cmdline.ptr, 0, cmdline.sizeof);
         for (int i = 0;; i++)
         {
             char ch = cast(char) getchar();
@@ -35,6 +34,10 @@ prompt:
         if (strcmp(cmdline.ptr, "hello\0".ptr) == 0)
         {
             printf("Hello, World from shell!\n");
+        }
+        else if (strcmp(cmdline.ptr, "exit\0".ptr) == 0)
+        {
+            exit();
         }
         else
         {

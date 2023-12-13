@@ -31,7 +31,7 @@ void putchar(char ch)
     sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
 }
 
-long getchar()
+int getchar()
 {
     pragma(inline, false);
     sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
@@ -125,7 +125,7 @@ void handle_syscall(trap_frame* f)
     case SYS_GETCHAR:
         while (true)
         {
-            long ch = getchar();
+            int ch = getchar();
             if (ch >= 0)
             {
                 f.a0 = cast(uint) ch;
@@ -134,6 +134,12 @@ void handle_syscall(trap_frame* f)
 
             yield();
         }
+        break;
+    case SYS_EXIT:
+        printf("process %d exited\n", current_proc.pid);
+        current_proc.state = PROC_EXITED;
+        yield();
+        panic!("unreachable");
         break;
     default:
         panic!("unexpected syscall");
@@ -256,6 +262,7 @@ paddr_t alloc_pages(uint n)
 enum PROC_MAX = 8;   // 最大プロセス数
 enum PROC_UNUSED = 0;   // 未使用のプロセス管理構造体
 enum PROC_RUNNABLE = 1;   // 実行可能なプロセス
+enum PROC_EXITED = 2;
 
 struct process
 {

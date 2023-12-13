@@ -6,6 +6,7 @@ extern (C):
 
 enum SYS_PUTCHAR = 1;
 enum SYS_GETCHAR = 2;
+enum SYS_EXIT = 3;
 
 alias va_list = imported!"core.stdc.stdarg".va_list;
 alias va_start = imported!"core.stdc.stdarg".va_start;
@@ -14,6 +15,7 @@ alias va_arg = imported!"core.stdc.stdarg".va_arg;
 
 void putchar(char);
 int getchar();
+noreturn exit();
 
 void printf(const(char)* fmt, ...)
 {
@@ -140,17 +142,19 @@ char* strcpy(char* dst, const(char)* src)
     return dst;
 }
 
-int strcmp(const(char)* s1, const(char)* s2)
+int strcmp(const char* s1, const char* s2)
 {
-    while (*s1 && *s2)
+    char* p1 = cast(char*) s1;
+    char* p2 = cast(char*) s2;
+    while (*p1 && *p2)
     {
-        if (*s1 != *s2)
+        if (*p1 != *p2)
         {
             break;
         }
-        s1++;
-        s2++;
+        p1++;
+        p2++;
     }
 
-    return *s1 - *s2;
+    return *p1 - *p2;
 }

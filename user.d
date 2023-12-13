@@ -7,11 +7,6 @@ import common;
 
 extern __gshared char* __stack_top;
 
-noreturn exit()
-{
-    for (;;) {}
-}
-
 int syscall(int sysno, int arg0, int arg1, int arg2)
 {
     return __asm!int(
@@ -29,6 +24,12 @@ void putchar(char ch)
 int getchar()
 {
     return syscall(SYS_GETCHAR, 0, 0, 0);
+}
+
+noreturn exit()
+{
+    syscall(SYS_EXIT, 0, 0, 0);
+    for (;;) {} // 念のため
 }
 
 @section(".text.start")
