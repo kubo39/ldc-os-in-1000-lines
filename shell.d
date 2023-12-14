@@ -31,11 +31,11 @@ prompt:
             }
         }
 
-        if (strcmp(cmdline.ptr, "hello\0".ptr) == 0)
+        if (strcmp(cmdline.ptr, "hello".ptr) == 0)
         {
             printf("Hello, World from shell!\n");
         }
-        else if (strcmp(cmdline.ptr, "exit\0".ptr) == 0)
+        else if (strcmp(cmdline.ptr, "exit".ptr) == 0)
         {
             exit();
         }

@@ -5,7 +5,7 @@ QEMU=qemu-system-riscv32
 
 LDC=ldc2
 
-DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m -O2 --betterC --boundscheck=off --checkaction=halt --defaultlib= -relocation-model=static -g -gcc=clang"
+DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m -O2 --disable-loop-unrolling --disable-simplify-libcalls --betterC --boundscheck=off --checkaction=halt --defaultlib= -relocation-model=static -g -gcc=clang"
 
 OBJCOPY=/usr/bin/llvm-objcopy
 
