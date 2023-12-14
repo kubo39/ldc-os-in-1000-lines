@@ -4,7 +4,11 @@
 
 ## 環境構築
 
-LDCは各自で入れておいてほしい。
+- LDC
+
+```
+curl -fsS https://dlang.org/install.sh | bash -s ldc
+```
 
 ### Ubuntu 22.04
 
