@@ -376,39 +376,6 @@ process* create_process(const void* image, size_t image_size)
     return proc;
 }
 
-__gshared process* proc_a;
-__gshared process* proc_b;
-
-void proc_a_entry()
-{
-    printf("starting process A\n");
-    while (true)
-    {
-        putchar('A');
-        yield();
-
-        foreach (i; 0 .. 30000000)
-        {
-            __asm("nop", "");
-        }
-    }
-}
-
-void proc_b_entry()
-{
-    printf("starting process B\n");
-    while (true)
-    {
-        putchar('B');
-        yield();
-
-        foreach (i; 0 .. 30000000)
-        {
-            __asm("nop", "");
-        }
-    }
-}
-
 __gshared process* current_proc; // 現在実行中のプロセス
 __gshared process *idle_proc;    // アイドルプロセス
 
@@ -515,12 +482,6 @@ void kernel_main()
     yield();
     panic!("switched to idle process\n");
 
-    paddr_t paddr0 = alloc_pages(2);
-    paddr_t paddr1 = alloc_pages(1);
-    printf("alloc_pages test: paddr0=%x\n", paddr0);
-    printf("alloc_pages test: paddr1=%x\n", paddr1);
-
-    panic!("booted!");
     printf("unreachable here!\n");
 
     for (;;)
