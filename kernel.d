@@ -648,7 +648,7 @@ void virtq_kick(virtio_virtq* vq, int desc_index)
 // デバイスが処理中のリクエストがあるかどうかを返す。
 bool virtq_is_busy(virtio_virtq* vq)
 {
-    return vq.last_used_index != *vq.used_index;
+    return vq.last_used_index != volatileLoad(vq.used_index);
 }
 
 // virtio-blkデバイスの読み書き。
