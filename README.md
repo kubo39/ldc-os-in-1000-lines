@@ -16,7 +16,7 @@ curl -fsS https://dlang.org/install.sh | bash -s ldc
 
 ```console
 sudo apt install qemu-system-misc clang lld
-curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/opensbi-riscv32-generic-fw_dynamic.elf
+curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/opensbi-riscv32-generic-fw_dynamic.bin
 ```
 
 Ubuntu 22.04がaptで提供しているopensbiは64ビットRISC-Vなので今回は利用できない。
