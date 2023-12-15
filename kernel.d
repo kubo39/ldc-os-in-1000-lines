@@ -1,9 +1,14 @@
+extern (C):
+
+import core.volatile;
+
 import ldc.attributes;
+import ldc.intrinsics;
 import ldc.llvmasm;
 
 import common;
 
-extern (C):
+alias alignUp = imported!"core.stdc.stdarg".alignUp;
 
 extern __gshared char* __bss;
 extern __gshared char* __bss_end;
@@ -358,6 +363,7 @@ process* create_process(const void* image, size_t image_size)
     {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
     }
+    map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
 
     // ユーザーのページをマッピングする
     for (uint off; off < image_size; off += PAGE_SIZE)
@@ -465,10 +471,253 @@ enum SSTATUS_SPIE = 1 << 5;
     `, "r,r", USER_BASE, SSTATUS_SPIE);
 }
 
+enum uint SECTOR_SIZE       = 512;
+enum uint VIRTQ_ENTRY_NUM   = 16;
+enum uint VIRTIO_DEVICE_BLK = 2;
+enum uint VIRTIO_BLK_PADDR = 0x10001000;
+enum uint VIRTIO_REG_MAGIC        = 0x00;
+enum uint VIRTIO_REG_VERSION      = 0x04;
+enum uint VIRTIO_REG_DEVICE_ID    = 0x08;
+enum uint VIRTIO_REG_QUEUE_SEL    = 0x30;
+enum uint VIRTIO_REG_QUEUE_NUM_MAX = 0x34;
+enum uint VIRTIO_REG_QUEUE_NUM    = 0x38;
+enum uint VIRTIO_REG_QUEUE_ALIGN  = 0x3c;
+enum uint VIRTIO_REG_QUEUE_PFN    = 0x40;
+enum uint VIRTIO_REG_QUEUE_READY  = 0x44;
+enum uint VIRTIO_REG_QUEUE_NOTIFY = 0x50;
+enum uint VIRTIO_REG_DEVICE_STATUS = 0x70;
+enum uint VIRTIO_REG_DEVICE_CONFIG = 0x100;
+enum uint VIRTIO_STATUS_ACK      = 1;
+enum uint VIRTIO_STATUS_DRIVER   = 2;
+enum uint VIRTIO_STATUS_DRIVER_OK = 4;
+enum uint VIRTIO_STATUS_FEAT_OK  = 8;
+enum uint VIRTQ_DESC_F_NEXT         = 1;
+enum uint VIRTQ_DESC_F_WRITE        = 2;
+enum uint VIRTQ_AVAIL_F_NO_INTERRUPT = 1;
+enum uint VIRTIO_BLK_T_IN  = 0;
+enum uint VIRTIO_BLK_T_OUT = 1;
+
+struct virtq_desc
+{
+align(1):
+    ulong addr;
+    uint len;
+    ushort flags;
+    ushort next;
+}
+
+struct virtq_avail
+{
+align(1):
+    ushort flags;
+    ushort index;
+    ushort[VIRTQ_ENTRY_NUM] ring;
+}
+
+struct virtq_used_elem
+{
+align(1):
+    uint id;
+    uint len;
+}
+
+struct virtq_used
+{
+align(1):
+    ushort flags;
+    ushort index;
+    virtq_used_elem[VIRTQ_ENTRY_NUM] ring;
+}
+
+struct virtio_virtq
+{
+align(1):
+    virtq_desc[VIRTQ_ENTRY_NUM] descs;
+    virtq_avail avail;
+    align(PAGE_SIZE) virtq_used used;
+    int queue_index;
+    ushort* used_index;
+    ushort last_used_index;
+}
+
+struct virtio_blk_req
+{
+align(1):
+    // 1つ目のディスクリプタ: デバイスからは読み込み専用
+    uint type;
+    uint reserved;
+    ulong sector;
+
+    // 2つ目のディスクリプタ: 読み込み処理の場合は、デバイスから書き込み可 (VIRTQ_DESC_F_WRITE)
+    ubyte[512] data;
+
+    // 3つ目のディスクリプタ: デバイスから書き込み可 (VIRTQ_DESC_F_WRITE)
+    ubyte status;
+}
+
+uint virtio_reg_read32(uint offset)
+{
+    return volatileLoad(cast(uint*) (VIRTIO_BLK_PADDR + offset));
+}
+
+ulong virtio_reg_read64(uint offset)
+{
+    return volatileLoad(cast(ulong*) (VIRTIO_BLK_PADDR + offset));
+}
+
+void virtio_reg_write32(uint offset, uint value)
+{
+    volatileStore(cast(uint*) (VIRTIO_BLK_PADDR + offset), value);
+}
+
+void virtio_reg_fetch_and_or32(uint offset, uint value)
+{
+    virtio_reg_write32(offset, virtio_reg_read32(offset) | value);
+}
+
+__gshared virtio_virtq* blk_request_vq;
+__gshared virtio_blk_req* blk_req;
+__gshared paddr_t blk_req_paddr;
+__gshared uint blk_capacity;
+
+void virtio_blk_init()
+{
+    if (virtio_reg_read32(VIRTIO_REG_MAGIC) != 0x74726976)
+    {
+        panic!("virtio: invalid magic value");
+    }
+    if (virtio_reg_read32(VIRTIO_REG_VERSION) != 1)
+    {
+        panic!("virtio: invalid version");
+    }
+    if (virtio_reg_read32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_BLK)
+    {
+        panic!("virtio: invalid device id");
+    }
+
+    // 1. Reset the device.
+    virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, 0);
+    // 2. Set the ACKNOWLEDGE status bit: the guest OS has noticed the device.
+    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
+    // 3. Set the DRIVER status bit.
+    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
+    // 5. Set the FEATURES_OK status bit.
+    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
+    // 7. Perform device-specific setup, including discovery of virtqueues for the device
+    blk_request_vq = virtq_init(0);
+    // 8. Set the DRIVER_OK status bit.
+    virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
+
+    // ディスクの容量を取得
+    blk_capacity = cast(uint) (virtio_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE);
+    printf("virtio-blk: capacity is %d bytes\n", blk_capacity);
+
+    // デバイスへの処理要求を格納する領域を確保
+    blk_req_paddr = alloc_pages(alignUp!(PAGE_SIZE)((*blk_req).sizeof) / PAGE_SIZE);
+    blk_req = cast(virtio_blk_req*) blk_req_paddr;
+}
+
+virtio_virtq* virtq_init(uint index)
+{
+    paddr_t virtq_paddr = alloc_pages(alignUp!(PAGE_SIZE)(virtio_virtq.sizeof) / PAGE_SIZE);
+    virtio_virtq* vq = cast(virtio_virtq*) virtq_paddr;
+    vq.queue_index = index;
+    vq.used_index = cast(ushort*) &vq.used.index;
+    // 1. Select the queue writing its index (first queue is 0) to QueueSel.
+    virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
+    // 5. Notify the device about the queue size by writing the size to QueueNum.
+    virtio_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
+    // 6. Notify the device about the used alignment by writing its value in bytes to QueueAlign.
+    virtio_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0);  
+    // 7. Write the physical number of the first page of the queue to the QueuePFN register.
+    virtio_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr);
+    return vq;
+}
+
+// デバイスに新しいリクエストがあることを通知する。desc_indexは、新しいリクエストの
+// 先頭ディスクリプタのインデックス。
+void virtq_kick(virtio_virtq* vq, int desc_index)
+{
+    vq.avail.ring[vq.avail.index % VIRTQ_ENTRY_NUM] = cast(ushort) desc_index;
+    vq.avail.index++;
+    llvm_memory_fence(DefaultOrdering, SynchronizationScope.SingleThread);
+    virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq.queue_index);
+    vq.last_used_index++;
+}
+
+// デバイスが処理中のリクエストがあるかどうかを返す。
+bool virtq_is_busy(virtio_virtq* vq)
+{
+    return vq.last_used_index != *vq.used_index;
+}
+
+// virtio-blkデバイスの読み書き。
+void read_write_disk(void* buf, uint sector, int is_write)
+{
+    if (sector >= blk_capacity / SECTOR_SIZE)
+    {
+        printf("virtio: tried to read/write sector=%d, but capacity is %d\n",
+              sector, blk_capacity / SECTOR_SIZE);
+        return;
+    }
+
+    // virtio-blkの仕様に従って、リクエストを構築する
+    blk_req.sector = sector;
+    blk_req.type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
+    if (is_write)
+    {
+        memcpy(blk_req.data.ptr, buf, SECTOR_SIZE);
+    }
+
+    // virtqueueのディスクリプタを構築する (3つのディスクリプタを使う)
+    virtio_virtq* vq = blk_request_vq;
+    vq.descs[0].addr = blk_req_paddr;
+    vq.descs[0].len = uint.sizeof * 2 + ulong.sizeof;
+    vq.descs[0].flags = VIRTQ_DESC_F_NEXT;
+    vq.descs[0].next = 1;
+
+    vq.descs[1].addr = blk_req_paddr + virtio_blk_req.data.offsetof;
+    vq.descs[1].len = SECTOR_SIZE;
+    vq.descs[1].flags = VIRTQ_DESC_F_NEXT | (is_write ? 0 : VIRTQ_DESC_F_WRITE);
+    vq.descs[1].next = 2;
+
+    vq.descs[2].addr = blk_req_paddr + virtio_blk_req.status.offsetof;
+    vq.descs[2].len = ubyte.sizeof;
+    vq.descs[2].flags = VIRTQ_DESC_F_WRITE;
+
+    // デバイスに新しいリクエストがあることを通知する
+    virtq_kick(vq, 0);
+
+    // デバイス側の処理が終わるまで待つ
+    while (virtq_is_busy(vq)) {}
+
+    // virtio-blk: 0でない値が返ってきたらエラー
+    if (blk_req.status != 0)
+    {
+        printf("virtio: warn: failed to read/write sector=%d status=%d\n",
+               sector, blk_req.status);
+        return;
+    }
+
+    // 読み込み処理の場合は、バッファにデータをコピーする
+    if (!is_write)
+    {
+        memcpy(buf, blk_req.data.ptr, SECTOR_SIZE);
+    }
+}
+
 void kernel_main()
 {
     memset(&__bss, 0, &__bss_end - &__bss);
     WRITE_CSR!"stvec"(&kernel_entry);
+    virtio_blk_init();
+
+    char[SECTOR_SIZE] buf;
+    read_write_disk(buf.ptr, 0, false);
+    printf("first sector: %s\n", buf.ptr);
+
+    strcpy(buf.ptr, "hello from kernel!!!\n");
+    read_write_disk(buf.ptr, 0, true);
 
     idle_proc = create_process(null, 0);
     idle_proc.pid = -1;

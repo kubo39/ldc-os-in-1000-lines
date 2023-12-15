@@ -5,7 +5,7 @@ QEMU=qemu-system-riscv32
 
 LDC=ldc2
 
-DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m --mabi=ilp32 -O2 --disable-simplify-libcalls --betterC --boundscheck=off --checkaction=halt --defaultlib= -relocation-model=static -g -gcc=clang"
+DFLAGS="--mtriple=riscv32-none-unknown --mattr=+m --mabi=ilp32 --disable-simplify-libcalls --betterC --boundscheck=off --checkaction=halt --defaultlib= -relocation-model=static -g -gcc=clang"
 
 OBJCOPY=/usr/bin/llvm-objcopy
 
@@ -25,4 +25,6 @@ $QEMU -machine virt \
     -nographic \
     -serial mon:stdio --no-reboot \
     -d unimp,guest_errors,int,cpu_reset -D qemu.log \
+    -drive id=drive0,file=lorem.txt,format=raw \
+    -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
     -kernel kernel.elf
