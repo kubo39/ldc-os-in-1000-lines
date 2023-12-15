@@ -7,6 +7,8 @@ extern (C):
 enum SYS_PUTCHAR = 1;
 enum SYS_GETCHAR = 2;
 enum SYS_EXIT = 3;
+enum SYS_READFILE = 4;
+enum SYS_WRITEFILE = 5;
 
 alias va_list = imported!"core.stdc.stdarg".va_list;
 alias va_start = imported!"core.stdc.stdarg".va_start;
@@ -16,6 +18,8 @@ alias va_arg = imported!"core.stdc.stdarg".va_arg;
 void putchar(char);
 int getchar();
 noreturn exit();
+int readfile(const char*, char*, int);
+int writefile(const char*, const char*, int);
 
 void printf(const(char)* fmt, ...)
 {

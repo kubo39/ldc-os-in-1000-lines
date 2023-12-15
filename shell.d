@@ -8,7 +8,7 @@ void main()
     {
 prompt:
         printf("> ");
-        char[8] cmdline;
+        char[12] cmdline;
         for (int i = 0;; i++)
         {
             char ch = cast(char) getchar();
@@ -38,6 +38,17 @@ prompt:
         else if (strcmp(cmdline.ptr, "exit".ptr) == 0)
         {
             exit();
+        }
+        else if (strcmp(cmdline.ptr, "readfile".ptr) == 0)
+        {
+            char[128] buf;
+            int len = readfile("./hello.txt".ptr, buf.ptr, buf.length);
+            buf[len] = '\0';
+            printf("%s\n", buf.ptr);
+        }
+        else if (strcmp(cmdline.ptr, "writefile".ptr) == 0)
+        {
+            writefile("./hello.txt".ptr, "Hello from shell!\n".ptr, 19);
         }
         else
         {

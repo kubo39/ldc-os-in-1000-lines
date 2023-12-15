@@ -32,6 +32,16 @@ noreturn exit()
     for (;;) {} // 念のため
 }
 
+int readfile(const char* filename, char* buf, int len)
+{
+    return syscall(SYS_READFILE, cast(int) filename, cast(int) buf, len);
+}
+
+int writefile(const char* filename, const char* buf, int len)
+{
+    return syscall(SYS_WRITEFILE, cast(int) filename, cast(int) buf, len);
+}
+
 @section(".text.start")
 @naked void start()
 {

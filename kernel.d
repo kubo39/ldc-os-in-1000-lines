@@ -49,6 +49,20 @@ void panic(string fmt)()
     for (;;) {}
 }
 
+file* fs_lookup(const char* filename)
+{
+    for (int i = 0; i < FILES_MAX; i++)
+    {
+        file* file = &files[i];
+        if (!strcmp(file.name.ptr, filename))
+        {
+            return file;
+        }
+    }
+
+    return null;
+}
+
 struct trap_frame
 {
 align(1):
@@ -145,6 +159,37 @@ void handle_syscall(trap_frame* f)
         current_proc.state = PROC_EXITED;
         yield();
         panic!("unreachable");
+        break;
+    case SYS_READFILE:
+    case SYS_WRITEFILE:
+        const char* filename = cast(const char*) f.a0;
+        char* buf = cast(char*) f.a1;
+        int len = f.a2;
+        file* file = fs_lookup(filename);
+        if (file is null)
+        {
+            printf("file not found: %s\n", filename);
+            f.a0 = -1;
+            break;
+        }
+
+        if (len > cast(int) file.data.sizeof)
+        {
+            len = file.size;
+        }
+
+        if (f.a3 == SYS_WRITEFILE)
+        {
+            memcpy(file.data.ptr, buf, len);
+            file.size = len;
+            fs_flush();
+        }
+        else
+        {
+            memcpy(buf, file.data.ptr, len);
+        }
+
+        f.a0 = len;
         break;
     default:
         panic!("unexpected syscall");
@@ -461,6 +506,7 @@ extern __gshared char* _binary_shell_bin_start;
 extern __gshared char* _binary_shell_bin_size;
 
 enum SSTATUS_SPIE = 1 << 5;
+enum SSTATUS_SUM = 1 << 18;
 
 @naked void user_entry()
 {
@@ -468,7 +514,7 @@ enum SSTATUS_SPIE = 1 << 5;
         csrw sepc, $0
         csrw sstatus, $1
         sret
-    `, "r,r", USER_BASE, SSTATUS_SPIE);
+    `, "r,r", USER_BASE, SSTATUS_SPIE | SSTATUS_SUM);
 }
 
 enum uint SECTOR_SIZE       = 512;
@@ -729,7 +775,7 @@ align(1):
     char[8] devminor;
     char[155] prefix;
     char[12] padding;
-    char* data;      // ヘッダに続くデータ領域を指す配列 (フレキシブル配列メンバ)
+    char[0] data;      // ヘッダに続くデータ領域を指す配列 (フレキシブル配列メンバ)
 }
 
 struct file
@@ -779,12 +825,71 @@ void fs_init()
         file* file = &files[i];
         file.in_use = true;
         strcpy(file.name.ptr, header.name.ptr);
-        memcpy(file.data.ptr, header.data, filesz);
+        memcpy(file.data.ptr, header.data.ptr, filesz);
         file.size = filesz;
         printf("file: %s, size=%d\n", file.name.ptr, file.size);
 
         off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + filesz);
     }
+}
+
+void fs_flush()
+{
+    // files変数の各ファイルの内容をdisk変数に書き込む
+    memset(disk.ptr, 0, disk.sizeof);
+    uint off = 0;
+    for (int file_i = 0; file_i < FILES_MAX; file_i++)
+    {
+        file* file = &files[file_i];
+        if (!file.in_use)
+        {
+            continue;
+        }
+
+        tar_header* header = cast(tar_header*) &disk[off];
+        memset(header, 0, (*header).sizeof);
+        strcpy(header.name.ptr, file.name.ptr);
+        strcpy(header.mode.ptr, "000644");
+        strcpy(header.magic.ptr, "ustar");
+        strcpy(header._version.ptr, "00");
+        header.type = '0';
+
+        // ファイルサイズを8進数文字列に変換
+        {
+            int filesz = file.size;
+            int i = 0;
+            do
+            {
+                header.size[i++] = (filesz % 8) + '0';
+                filesz /= 8;
+            } while (filesz > 0);
+        }
+
+        // チェックサムを計算
+        int checksum = ' ' * header.checksum.sizeof;
+        for (uint i = 0; i < tar_header.sizeof; i++)
+        {
+            checksum += cast(ubyte) disk[off + i];
+        }
+
+        for (int i = 5; i >= 0; i--)
+        {
+            header.checksum[i] = (checksum % 8) + '0';
+            checksum /= 8;
+        }
+
+        // ファイルデータをコピー
+        memcpy(header.data.ptr, file.data.ptr, file.size);
+        off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + file.size);
+    }
+
+    // disk変数の内容をディスクに書き込む
+    for (uint sector = 0; sector < disk.sizeof / SECTOR_SIZE; sector++)
+    {
+        read_write_disk(&disk[sector * SECTOR_SIZE], sector, true);
+    }
+
+    printf("wrote %d bytes to disk\n", disk.sizeof);
 }
 
 void kernel_main()
