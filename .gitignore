@@ -1,5 +1,7 @@
+disk/
 *.bin
 *.elf
 *.o
 *.Map
 *.log
+*.tar

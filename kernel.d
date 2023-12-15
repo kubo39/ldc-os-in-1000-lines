@@ -706,11 +706,93 @@ void read_write_disk(void* buf, uint sector, int is_write)
     }
 }
 
+enum FILES_MAX     = 2;
+enum DISK_MAX_SIZE = alignUp!(SECTOR_SIZE)(file.sizeof * FILES_MAX);
+
+struct tar_header
+{
+align(1):
+    char[100] name;
+    char[8] mode;
+    char[8] uid;
+    char[8] gid;
+    char[12] size;
+    char[12] mtime;
+    char[8] checksum;
+    char type;
+    char[100] linkname;
+    char[6] magic;
+    char[2] _version;
+    char[32] uname;
+    char[32] gname;
+    char[8] devmajor;
+    char[8] devminor;
+    char[155] prefix;
+    char[12] padding;
+    char* data;      // ヘッダに続くデータ領域を指す配列 (フレキシブル配列メンバ)
+}
+
+struct file
+{
+    bool in_use;      // このファイルエントリが使われているか
+    char[100] name;   // ファイル名
+    char[1024] data;  // ファイルの内容
+    size_t size;      // ファイルサイズ
+}
+
+__gshared file[FILES_MAX] files;
+__gshared ubyte[DISK_MAX_SIZE] disk;
+
+int oct2int(char* oct, int len)
+{
+    int dec = 0;
+    for (int i = 0; i < len; i++) {
+        if (oct[i] < '0' || oct[i] > '7')
+        {
+            break;
+        }
+        dec = dec * 8 + (oct[i] - '0');
+    }
+    return dec;
+}
+
+void fs_init()
+{
+    for (uint sector = 0; sector < disk.sizeof / SECTOR_SIZE; sector++)
+        read_write_disk(&disk[sector * SECTOR_SIZE], sector, false);
+
+    uint off = 0;
+    for (int i = 0; i < FILES_MAX; i++)
+    {
+        tar_header* header = cast(tar_header*) &disk[off];
+        if (header.name[0] == '\0')
+        {
+            break;
+        }
+
+        if (strcmp(header.magic.ptr, "ustar") != 0)
+        {
+            panic!("invalid tar header:");
+        }
+
+        int filesz = oct2int(header.size.ptr, header.size.sizeof);
+        file* file = &files[i];
+        file.in_use = true;
+        strcpy(file.name.ptr, header.name.ptr);
+        memcpy(file.data.ptr, header.data, filesz);
+        file.size = filesz;
+        printf("file: %s, size=%d\n", file.name.ptr, file.size);
+
+        off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + filesz);
+    }
+}
+
 void kernel_main()
 {
     memset(&__bss, 0, &__bss_end - &__bss);
     WRITE_CSR!"stvec"(&kernel_entry);
     virtio_blk_init();
+    fs_init();
 
     char[SECTOR_SIZE] buf;
     read_write_disk(buf.ptr, 0, false);

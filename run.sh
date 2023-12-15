@@ -19,12 +19,14 @@ $OBJCOPY -Ibinary -Oelf32-littleriscv shell.bin shell.bin.o
 $LDC $DFLAGS -Xcc=--target=riscv32 -Xcc=-march=rv32im -Xcc=-ffreestanding -Xcc=-nostdlib -Xcc=-Wl,-Tkernel.ld -Xcc=-Wl,-Map=kernel.Map -of=kernel.elf \
     common.d kernel.d shell.bin.o
 
+(cd disk && tar cf ../disk.tar --format=ustar ./*.txt)
+
 # QEMUを起動
 $QEMU -machine virt \
     -bios default \
     -nographic \
     -serial mon:stdio --no-reboot \
     -d unimp,guest_errors,int,cpu_reset -D qemu.log \
-    -drive id=drive0,file=lorem.txt,format=raw \
+    -drive id=drive0,file=disk.tar,format=raw \
     -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
     -kernel kernel.elf
