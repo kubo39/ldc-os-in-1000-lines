@@ -15,8 +15,8 @@ struct sbiret
     int value;
 }
 
-sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
-                long arg5, long fid, long eid)
+sbiret sbi_call(int arg0, int arg1, int arg2, int arg3, int arg4,
+                int arg5, int fid, int eid)
 {
     pragma(inline, true);
     return __asm!sbiret(
