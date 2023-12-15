@@ -44,7 +44,7 @@ void panic(string fmt)()
     for (;;) {}
 }
 
-align(1) struct trap_frame
+struct trap_frame
 {
 align(1):
     uint ra;
@@ -468,9 +468,6 @@ enum SSTATUS_SPIE = 1 << 5;
 void kernel_main()
 {
     memset(&__bss, 0, &__bss_end - &__bss);
-    printf("\n\nHello, World!\n");
-    printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
-
     WRITE_CSR!"stvec"(&kernel_entry);
 
     idle_proc = create_process(null, 0);
