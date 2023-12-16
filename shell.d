@@ -42,13 +42,13 @@ prompt:
         else if (strcmp(cmdline.ptr, "readfile".ptr) == 0)
         {
             char[128] buf;
-            int len = readfile("./hello.txt".ptr, buf.ptr, buf.length);
+            int len = readfile("hello.txt".ptr, buf.ptr, buf.length);
             buf[len] = '\0';
             printf("%s\n", buf.ptr);
         }
         else if (strcmp(cmdline.ptr, "writefile".ptr) == 0)
         {
-            writefile("./hello.txt".ptr, "Hello from shell!\n".ptr, 19);
+            writefile("hello.txt".ptr, "Hello from shell!\n".ptr, 19);
         }
         else
         {

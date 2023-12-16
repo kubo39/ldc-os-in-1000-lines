@@ -19,7 +19,7 @@ $OBJCOPY -Ibinary -Oelf32-littleriscv shell.bin shell.bin.o
 $LDC $DFLAGS -Xcc=--target=riscv32 -Xcc=-march=rv32im -Xcc=-ffreestanding -Xcc=-nostdlib -Xcc=-Wl,-Tkernel.ld -Xcc=-Wl,-Map=kernel.Map -of=kernel.elf \
     common.d kernel.d shell.bin.o
 
-(cd disk && tar cf ../disk.tar --format=ustar ./*.txt)
+(cd disk && tar cf ../disk.tar --format=ustar *.txt)
 
 # QEMUを起動
 $QEMU -machine virt \
