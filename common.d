@@ -120,20 +120,6 @@ void* memcpy(void* dst, const(void)* src, size_t n)
     return dst;
 }
 
-int memcmp(const void* s1, const void* s2, size_t n)
-{
-    const ubyte* x = cast(ubyte*) s1;
-    const ubyte* y = cast(ubyte*) s2;
-    foreach (i; 0 .. n)
-    {
-        auto a = x[i];
-        auto b = y[i];
-        const r = (a > b) - (a < b);
-        if (r != 0) return r;
-    }
-    return 0;
-}
-
 char* strcpy(char* dst, const(char)* src)
 {
     char* d = dst;
