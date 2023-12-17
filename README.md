@@ -2,6 +2,8 @@
 
 [Writing an OS in 1,000 Lines](https://operating-system-in-1000-lines.vercel.app/ja/welcome)をD言語で書くやつ
 
+- ブログ記事: [Writing OS in 1000 lines をD言語でやった](https://kubo39.hatenablog.com/entry/2023/12/16/Writing_OS_in_1000_lines_%E3%82%92D%E8%A8%80%E8%AA%9E%E3%81%A7%E3%82%84%E3%81%A3%E3%81%9F)
+
 ## 環境構築
 
 - LDC
