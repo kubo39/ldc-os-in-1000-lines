@@ -16,7 +16,6 @@ prompt:
             if (i == cmdline.sizeof - 1)
             {
                 printf("command line too long\n");
-                for (;;) {}
                 goto prompt;
             }
             else if (ch == '\r')
