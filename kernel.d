@@ -684,9 +684,11 @@ virtio_virtq* virtq_init(uint index)
 // 先頭ディスクリプタのインデックス。
 void virtq_kick(virtio_virtq* vq, int desc_index)
 {
+    pragma(inline, false);
     vq.avail.ring[vq.avail.index % VIRTQ_ENTRY_NUM] = cast(ushort) desc_index;
     vq.avail.index++;
-    llvm_memory_fence(DefaultOrdering, SynchronizationScope.SingleThread);
+    // オリジナルに合わせるためにCrossThreadを指定
+    llvm_memory_fence(DefaultOrdering, SynchronizationScope.CrossThread);
     virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq.queue_index);
     vq.last_used_index++;
 }
