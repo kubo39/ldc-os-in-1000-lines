@@ -9,6 +9,10 @@ extern __gshared char* __stack_top;
 
 int syscall(int sysno, int arg0, int arg1, int arg2)
 {
+    // LLVMはmemory clobberを単に無視し、またLDCは常にインラインアセンブラで
+    // ReadWriteMemoryな関数属性が付与され、これはmemory clobberが付与される
+    // のと同じ効果があるため `~{memory}` は不要だが、わかりやすさのために
+    // 残しておく。
     return __asm!int(
         "ecall",
         "={a0},{a0},{a1},{a2},{a3},~{memory}",
