@@ -1,4 +1,4 @@
-# Wrinting OS in 1000 lines, in D
+# Writing OS in 1000 lines, in D
 
 [Writing an OS in 1,000 Lines](https://operating-system-in-1000-lines.vercel.app/ja/welcome)をD言語で書くやつ
 
