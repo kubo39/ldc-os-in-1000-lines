@@ -33,7 +33,7 @@ int getchar()
 noreturn exit()
 {
     syscall(SYS_EXIT, 0, 0, 0);
-    for (;;) {} // 念のため
+    for (;;) {}
 }
 
 int readfile(const char* filename, char* buf, int len)
