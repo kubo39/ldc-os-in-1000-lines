@@ -199,9 +199,10 @@ void handle_syscall(trap_frame* f)
     }
 }
 
-align(4) @naked void kernel_entry()
+@naked void kernel_entry()
 {
     __asm(`
+        .balign 4
         # 実行中プロセスのカーネルスタックをsscratchから取り出す
         # tmp = sp; sp = sscratch; sscratch = tmp;
         csrrw sp, sscratch, sp
