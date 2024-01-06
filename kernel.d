@@ -10,9 +10,9 @@ import common;
 
 alias alignUp = imported!"core.stdc.stdarg".alignUp;
 
-extern __gshared char* __bss;
-extern __gshared char* __bss_end;
-extern __gshared char* __stack_top;
+extern __gshared ubyte __bss;
+extern __gshared ubyte __bss_end;
+extern __gshared ubyte __stack_top;
 
 struct sbiret
 {
@@ -285,8 +285,8 @@ void handle_syscall(trap_frame* f)
     `, "");
 }
 
-extern __gshared char* __free_ram;
-extern __gshared char* __free_ram_end;
+extern __gshared ubyte __free_ram;
+extern __gshared ubyte __free_ram_end;
 
 alias paddr_t = uint;
 alias vaddr_t = uint;
@@ -367,7 +367,7 @@ __gshared process[PROC_MAX] procs;
     `, "");
 }
 
-extern __gshared char* __kernel_base;
+extern __gshared ubyte __kernel_base;
 
 process* create_process(const void* image, size_t image_size)
 {
@@ -432,7 +432,7 @@ process* create_process(const void* image, size_t image_size)
 }
 
 __gshared process* current_proc; // 現在実行中のプロセス
-__gshared process *idle_proc;    // アイドルプロセス
+__gshared process* idle_proc;    // アイドルプロセス
 
 void yield()
 {
@@ -506,8 +506,8 @@ void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
 
 enum USER_BASE = 0x1000000;
 
-extern __gshared char* _binary_shell_bin_start;
-extern __gshared char* _binary_shell_bin_size;
+extern __gshared ubyte _binary_shell_bin_start;
+extern __gshared ubyte _binary_shell_bin_size;
 
 enum SSTATUS_SPIE = 1 << 5;
 enum SSTATUS_SUM = 1 << 18;

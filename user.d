@@ -5,7 +5,7 @@ import ldc.llvmasm;
 
 import common;
 
-extern __gshared char* __stack_top;
+extern __gshared ubyte __stack_top;
 
 int syscall(int sysno, int arg0, int arg1, int arg2)
 {
