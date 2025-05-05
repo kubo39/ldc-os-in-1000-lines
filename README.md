@@ -41,7 +41,7 @@ qemu-system-riscv32
 
 - Totsugekitai/kanios
   - レポジトリ: https://github.com/Totsugekitai/kanios
-  - ブログ記事: [「Writing an OS in 1000 Lines」をRISC-V 64bit向けにRustで書いた](https://hanazonochateau.net/posts/2023/09/05/operating-system-in-1000-lines-rs/)
+  - ブログ記事: [「Writing an OS in 1000 Lines」をRISC-V 64bit向けにRustで書いた](https://hanazonochateau.net/posts/prog/operating-system-in-1000-lines-rs/)
 
 ### Zig
 
