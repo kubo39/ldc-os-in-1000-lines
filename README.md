@@ -12,16 +12,14 @@
 curl -fsS https://dlang.org/install.sh | bash -s ldc
 ```
 
-### Ubuntu 22.04
+### Ubuntu 24.04
 
 以下をパッケージとcurlで入れる。
 
 ```console
-sudo apt install qemu-system-misc clang lld
-curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/opensbi-riscv32-generic-fw_dynamic.bin
+sudo apt install qemu-system-misc clang lld opensbi
+cp /usr/lib/riscv32-linux-gnu/opensbi/generic/fw_dynamic.bin opensbi-riscv32-generic-fw_dynamic.bin
 ```
-
-Ubuntu 22.04がaptで提供しているopensbiは64ビットRISC-Vなので今回は利用できない。
 
 動作確認。qemuが立ち上がるはずなので `q` で終了。
 
