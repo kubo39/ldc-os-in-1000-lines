@@ -5,8 +5,6 @@ import ldc.llvmasm;
 
 import common;
 
-extern __gshared ubyte __stack_top;
-
 int syscall(int sysno, int arg0, int arg1, int arg2)
 {
     // LLVMはmemory clobberを単に無視し、またLDCは常にインラインアセンブラで
@@ -50,8 +48,8 @@ int writefile(const char* filename, const char* buf, int len)
 @naked void start()
 {
     __asm(`
-        mv sp, $0
+        la sp, __stack_top
         call main
         call exit
-    `, "r", &__stack_top);
+    `, "");
 }

@@ -12,7 +12,6 @@ alias alignUp = imported!"core.stdc.stdarg".alignUp;
 
 extern __gshared ubyte __bss;
 extern __gshared ubyte __bss_end;
-extern __gshared ubyte __stack_top;
 
 struct sbiret
 {
@@ -933,7 +932,7 @@ void kernel_main()
 @naked void boot()
 {
     __asm(`
-        mv sp, $0
+        la sp, __stack_top
         j kernel_main
-    `, "r", &__stack_top);
+    `, "");
 }
