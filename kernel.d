@@ -10,8 +10,8 @@ import common;
 
 alias alignUp = imported!"core.stdc.stdarg".alignUp;
 
-extern __gshared ubyte __bss;
-extern __gshared ubyte __bss_end;
+extern __gshared ubyte[0] __bss;
+extern __gshared ubyte[0] __bss_end;
 
 struct sbiret
 {
@@ -284,8 +284,8 @@ void handle_syscall(trap_frame* f)
     `, "");
 }
 
-extern __gshared ubyte __free_ram;
-extern __gshared ubyte __free_ram_end;
+extern __gshared ubyte[0] __free_ram;
+extern __gshared ubyte[0] __free_ram_end;
 
 alias paddr_t = uint;
 alias vaddr_t = uint;
@@ -298,12 +298,12 @@ paddr_t alloc_pages(uint n)
 {
     if (next_paddr == 0)
     {
-        next_paddr = cast(paddr_t) &__free_ram;
+        next_paddr = cast(paddr_t) __free_ram.ptr;
     }
     paddr_t paddr = next_paddr;
     next_paddr += n * PAGE_SIZE;
 
-    if (next_paddr > cast(paddr_t) &__free_ram_end)
+    if (next_paddr > cast(paddr_t) __free_ram_end.ptr)
     {
         panic!("Out of memory");
     }
@@ -366,7 +366,7 @@ __gshared process[PROC_MAX] procs;
     `, "");
 }
 
-extern __gshared ubyte __kernel_base;
+extern __gshared ubyte[0] __kernel_base;
 
 process* create_process(const void* image, size_t image_size)
 {
@@ -406,8 +406,8 @@ process* create_process(const void* image, size_t image_size)
     uint* page_table = cast(uint*) alloc_pages(1);
 
     // カーネルのページをマッピングする
-    for (paddr_t paddr = cast(paddr_t) &__kernel_base;
-         paddr < cast(paddr_t) &__free_ram_end; paddr += PAGE_SIZE)
+    for (paddr_t paddr = cast(paddr_t) __kernel_base.ptr;
+         paddr < cast(paddr_t) __free_ram_end.ptr; paddr += PAGE_SIZE)
     {
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
     }
@@ -505,8 +505,8 @@ void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
 
 enum USER_BASE = 0x1000000;
 
-extern __gshared ubyte _binary_shell_bin_start;
-extern __gshared ubyte _binary_shell_bin_size;
+extern __gshared ubyte[0] _binary_shell_bin_start;
+extern __gshared ubyte[0] _binary_shell_bin_size;
 
 enum SSTATUS_SPIE = 1 << 5;
 enum SSTATUS_SUM = 1 << 18;
@@ -899,7 +899,7 @@ void fs_flush()
 
 void kernel_main()
 {
-    memset(&__bss, 0, &__bss_end - &__bss);
+    memset(__bss.ptr, 0, __bss_end.ptr - __bss.ptr);
     WRITE_CSR!"stvec"(&kernel_entry);
     virtio_blk_init();
     fs_init();
@@ -915,7 +915,7 @@ void kernel_main()
     idle_proc.pid = -1;
     current_proc = idle_proc;
 
-    create_process(&_binary_shell_bin_start, cast(size_t) &_binary_shell_bin_size);
+    create_process(_binary_shell_bin_start.ptr, cast(size_t) _binary_shell_bin_size.ptr);
 
     yield();
     panic!("switched to idle process\n");
