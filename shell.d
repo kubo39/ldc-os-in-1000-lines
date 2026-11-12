@@ -8,7 +8,7 @@ void main()
     {
 prompt:
         printf("> ");
-        char[12] cmdline;
+        char[12] cmdline = 0;
         for (int i = 0;; i++)
         {
             char ch = cast(char) getchar();
@@ -40,7 +40,7 @@ prompt:
         }
         else if (strcmp(cmdline.ptr, "readfile".ptr) == 0)
         {
-            char[128] buf;
+            char[128] buf = 0;
             int len = readfile("hello.txt".ptr, buf.ptr, buf.length);
             buf[len] = '\0';
             printf("%s\n", buf.ptr);
