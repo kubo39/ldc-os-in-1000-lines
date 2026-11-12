@@ -388,7 +388,7 @@ process* create_process(const void* image, size_t image_size)
 
     // switch_context() で復帰できるように、
     // スタックに呼び出し先保存レジスタを積む
-    uint* sp = cast(uint*) &(proc.stack[proc.stack.sizeof - 1]);
+    auto sp = cast(uint*) (proc.stack.ptr + proc.stack.sizeof);
     *--sp = 0;     // s11
     *--sp = 0;     // s10
     *--sp = 0;     // s9
@@ -464,7 +464,7 @@ void yield()
         `,
         "r,r",
         (SATP_SV32 | (cast(uint) next.page_table / PAGE_SIZE)),
-        &next.stack[next.stack.sizeof-1]
+        cast(uint*) (next.stack.ptr + next.stack.sizeof)
     );
 
     switch_context(&prev.sp, &next.sp);
