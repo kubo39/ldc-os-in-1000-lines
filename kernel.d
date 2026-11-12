@@ -514,10 +514,12 @@ enum SSTATUS_SUM = 1 << 18;
 @naked void user_entry()
 {
     __asm(`
-        csrw sepc, $0
-        csrw sstatus, $1
+        li t0, $0
+        csrw sepc, t0
+        li t0, $1
+        csrw sstatus, t0
         sret
-    `, "r,r", USER_BASE, SSTATUS_SPIE | SSTATUS_SUM);
+    `, "n,n", USER_BASE, SSTATUS_SPIE | SSTATUS_SUM);
 }
 
 enum uint SECTOR_SIZE       = 512;
