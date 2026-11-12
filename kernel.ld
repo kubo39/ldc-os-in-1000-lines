@@ -6,6 +6,8 @@ SECTIONS {
 
     .text :{
         KEEP(*(.text.boot));
+        . = ALIGN(4);
+        KEEP(*(.text.trap));
         *(.text .text.*);
     }
 
