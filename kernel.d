@@ -45,7 +45,7 @@ int getchar()
     return ret.error;
 }
 
-void panic(string fmt, string file = __FILE__, int line = __LINE__)()
+noreturn panic(string fmt, string file = __FILE__, int line = __LINE__)()
 {
     printf("PANIC: %s:%d: " ~ fmt ~ "\n", file.ptr, line);
     for (;;) {}
