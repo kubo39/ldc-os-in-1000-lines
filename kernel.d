@@ -48,7 +48,10 @@ int getchar()
 noreturn panic(string fmt, string file = __FILE__, int line = __LINE__)()
 {
     printf("PANIC: %s:%d: " ~ fmt ~ "\n", file.ptr, line);
-    for (;;) {}
+    for (;;)
+    {
+        __asm("wfi", "");
+    }
 }
 
 file* fs_lookup(const char* filename)
