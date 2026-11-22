@@ -7,7 +7,7 @@ void main()
     while(true)
     {
 prompt:
-        printf("> ");
+        printf!"> "();
         char[12] cmdline = 0;
         for (int i = 0;; i++)
         {
@@ -15,12 +15,12 @@ prompt:
             putchar(ch);
             if (i == cmdline.sizeof - 1)
             {
-                printf("command line too long\n");
+                printf!"command line too long\n"();
                 goto prompt;
             }
             else if (ch == '\r')
             {
-                printf("\n");
+                printf!"\n"();
                 cmdline[i] = '\0';
                 break;
             }
@@ -32,7 +32,7 @@ prompt:
 
         if (strcmp(cmdline.ptr, "hello".ptr) == 0)
         {
-            printf("Hello, World from shell!\n");
+            printf!"Hello, World from shell!\n"();
         }
         else if (strcmp(cmdline.ptr, "exit".ptr) == 0)
         {
@@ -43,7 +43,7 @@ prompt:
             char[128] buf = 0;
             int len = readfile("hello.txt".ptr, buf.ptr, buf.length);
             buf[len] = '\0';
-            printf("%s\n", buf.ptr);
+            printf!"%s\n"(buf.ptr);
         }
         else if (strcmp(cmdline.ptr, "writefile".ptr) == 0)
         {
@@ -51,7 +51,7 @@ prompt:
         }
         else
         {
-            printf("unknown command: %s\n", cmdline.ptr);
+            printf!"unknown command: %s\n"(cmdline.ptr);
         }
     }
 }

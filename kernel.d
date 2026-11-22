@@ -47,7 +47,7 @@ int getchar()
 
 noreturn panic(string fmt, string file = __FILE__, int line = __LINE__)()
 {
-    printf("PANIC: %s:%d: " ~ fmt ~ "\n", file.ptr, line);
+    printf!("PANIC: %s:%d: " ~ fmt ~ "\n")(file, line);
     for (;;)
     {
         __asm("wfi", "");
@@ -129,9 +129,9 @@ void handle_trap(trap_frame* f)
     }
     else
     {
-        printf("scause: %x\n", scause);
-        printf("stval: %x\n", stval);
-        printf("user_pc: %x\n", user_pc);
+        printf!"scause: %x\n"(scause);
+        printf!"stval: %x\n"(stval);
+        printf!"user_pc: %x\n"(user_pc);
 
         panic!("unexpected trap");
     }
@@ -160,7 +160,7 @@ void handle_syscall(trap_frame* f)
         }
         break;
     case SYS_EXIT:
-        printf("process %d exited\n", current_proc.pid);
+        printf!"process %d exited\n"(current_proc.pid);
         current_proc.state = PROC_EXITED;
         yield();
         panic!("unreachable");
@@ -173,7 +173,7 @@ void handle_syscall(trap_frame* f)
         file* file = fs_lookup(filename);
         if (file is null)
         {
-            printf("file not found: %s\n", filename);
+            printf!"file not found: %s\n"(filename);
             f.a0 = -1;
             break;
         }
@@ -664,7 +664,7 @@ void virtio_blk_init()
 
     // ディスクの容量を取得
     blk_capacity = cast(uint) (virtio_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE);
-    printf("virtio-blk: capacity is %d bytes\n", blk_capacity);
+    printf!"virtio-blk: capacity is %d bytes\n"(blk_capacity);
 
     // デバイスへの処理要求を格納する領域を確保
     blk_req_paddr = alloc_pages(alignUp!(PAGE_SIZE)((*blk_req).sizeof) / PAGE_SIZE);
@@ -712,7 +712,7 @@ void read_write_disk(void* buf, uint sector, int is_write)
 {
     if (sector >= blk_capacity / SECTOR_SIZE)
     {
-        printf("virtio: tried to read/write sector=%d, but capacity is %d\n",
+        printf!"virtio: tried to read/write sector=%d, but capacity is %d\n"(
               sector, blk_capacity / SECTOR_SIZE);
         return;
     }
@@ -750,7 +750,7 @@ void read_write_disk(void* buf, uint sector, int is_write)
     // virtio-blk: 0でない値が返ってきたらエラー
     if (blk_req.status != 0)
     {
-        printf("virtio: warn: failed to read/write sector=%d status=%d\n",
+        printf!"virtio: warn: failed to read/write sector=%d status=%d\n"(
                sector, blk_req.status);
         return;
     }
@@ -837,7 +837,7 @@ void fs_init()
         strcpy(file.name.ptr, header.name.ptr);
         memcpy(file.data.ptr, header.data.ptr, filesz);
         file.size = filesz;
-        printf("file: %s, size=%d\n", file.name.ptr, file.size);
+        printf!"file: %s, size=%d\n"(file.name.ptr, file.size);
 
         off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + filesz);
     }
@@ -899,7 +899,7 @@ void fs_flush()
         read_write_disk(&disk[sector * SECTOR_SIZE], sector, true);
     }
 
-    printf("wrote %d bytes to disk\n", disk.sizeof);
+    printf!"wrote %d bytes to disk\n"(disk.sizeof);
 }
 
 void kernel_main()
@@ -911,7 +911,7 @@ void kernel_main()
 
     char[SECTOR_SIZE] buf;
     read_write_disk(buf.ptr, 0, false);
-    printf("first sector: %s\n", buf.ptr);
+    printf!"first sector: %s\n"(buf.ptr);
 
     strcpy(buf.ptr, "hello from kernel!!!\n");
     read_write_disk(buf.ptr, 0, true);
@@ -925,7 +925,7 @@ void kernel_main()
     yield();
     panic!("switched to idle process\n");
 
-    printf("unreachable here!\n");
+    printf!"unreachable here!\n"();
 
     for (;;)
     {
