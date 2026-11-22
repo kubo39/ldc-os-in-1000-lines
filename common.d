@@ -67,6 +67,14 @@ int strcmp(const char* s1, const char* s2)
 
 extern (D):
 
+template toDecString(size_t n)
+{
+    static if (n < 10)
+        enum toDecString = "0123456789"[n .. n + 1];
+    else
+        enum toDecString = toDecString!(n / 10) ~ toDecString!(n % 10);
+}
+
 void putStr(const(char)[] s)
 {
     foreach (char c; s)

@@ -13,20 +13,20 @@ alias alignUp = imported!"core.stdc.stdarg".alignUp;
 extern __gshared ubyte[0] __bss;
 extern __gshared ubyte[0] __bss_end;
 
-struct sbiret
+struct SbiRet
 {
     int error;
     int value;
 }
 
-sbiret sbi_call(int arg0, int arg1, int arg2, int arg3, int arg4,
+SbiRet sbiCall(int arg0, int arg1, int arg2, int arg3, int arg4,
                 int arg5, int fid, int eid)
 {
     // LLVMはmemory clobberを単に無視し、またLDCは常にインラインアセンブラで
     // ReadWriteMemoryな関数属性が付与され、これはmemory clobberが付与される
     // のと同じ効果があるため `~{memory}` は不要だが、わかりやすさのために
     // 残しておく。
-    return __asm!sbiret(
+    return __asm!SbiRet(
         "ecall",
         "={a0},={a1},{a0},{a1},{a2},{a3},{a4},{a5},{a6},{a7},~{memory}",
         arg0, arg1, arg2, arg3, arg4, arg5, fid, eid
@@ -35,13 +35,13 @@ sbiret sbi_call(int arg0, int arg1, int arg2, int arg3, int arg4,
 
 void putchar(char ch)
 {
-    sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
+    sbiCall(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
 }
 
 int getchar()
 {
     pragma(inline, false);
-    sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+    SbiRet ret = sbiCall(0, 0, 0, 0, 0, 0, 0, 2);
     return ret.error;
 }
 
@@ -54,11 +54,11 @@ noreturn panic(string fmt, string file = __FILE__, int line = __LINE__)()
     }
 }
 
-file* fs_lookup(const char* filename)
+File* fsLookup(const char* filename)
 {
     for (int i = 0; i < FILES_MAX; i++)
     {
-        file* file = &files[i];
+        File* file = &files[i];
         if (!strcmp(file.name.ptr, filename))
         {
             return file;
@@ -68,78 +68,67 @@ file* fs_lookup(const char* filename)
     return null;
 }
 
-struct trap_frame
+struct TrapFrame
 {
-align(1):
-    uint ra;
-    uint gp;
-    uint tp;
-    uint t0;
-    uint t1;
-    uint t2;
-    uint t3;
-    uint t4;
-    uint t5;
-    uint t6;
-    uint a0;
-    uint a1;
-    uint a2;
-    uint a3;
-    uint a4;
-    uint a5;
-    uint a6;
-    uint a7;
-    uint s0;
-    uint s1;
-    uint s2;
-    uint s3;
-    uint s4;
-    uint s5;
-    uint s6;
-    uint s7;
-    uint s8;
-    uint s9;
-    uint s10;
-    uint s11;
+    uint ra, gp, tp;
+    uint t0, t1, t2, t3, t4, t5, t6;
+    uint a0, a1, a2, a3, a4, a5, a6, a7;
+    uint s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
     uint sp;
 }
 
-T READ_CSR(string reg, T)()
+static assert(TrapFrame.sizeof == 31 * 4);
+
+enum trapFrameStackSize = alignUp!16(TrapFrame.sizeof);
+static assert(trapFrameStackSize == 128);
+
+template regOps(string op, T, size_t i = 0)
+{
+    static if (i == T.tupleof.length)
+        enum regOps = "";
+    else static if (__traits(identifier, T.tupleof[i]) == "sp")
+        enum regOps = regOps!(op, T, i + 1);
+    else
+        enum regOps = op ~ " " ~ __traits(identifier, T.tupleof[i]) ~ ", "
+            ~ toDecString!(T.tupleof[i].offsetof) ~ "(sp)\n" ~ regOps!(op, T, i + 1);
+}
+
+T readCsr(string reg, T)()
 {
     return __asm!T("csrr $0, " ~ reg, "=r");
 }
 
-void WRITE_CSR(string reg)(void* value)
+void writeCsr(string reg)(void* value)
 {
     __asm("csrw " ~ reg ~ ", $0", "r", value);
 }
 
 enum SCAUSE_ECALL = 8;
 
-void handle_trap(trap_frame* f)
+void handleTrap(TrapFrame* f)
 {
-    uint scause = READ_CSR!("scause", uint)();
-    uint stval = READ_CSR!("stval", uint)();
-    uint user_pc = READ_CSR!("sepc", uint)();
+    uint scause = readCsr!("scause", uint)();
+    uint stval = readCsr!("stval", uint)();
+    uint userPc = readCsr!("sepc", uint)();
 
     if (scause == SCAUSE_ECALL)
     {
-        handle_syscall(f);
-        user_pc += 4;
+        handleSyscall(f);
+        userPc += 4;
     }
     else
     {
         printf!"scause: %x\n"(scause);
         printf!"stval: %x\n"(stval);
-        printf!"user_pc: %x\n"(user_pc);
+        printf!"user_pc: %x\n"(userPc);
 
         panic!("unexpected trap");
     }
 
-    WRITE_CSR!("sepc")(cast(void*)user_pc);
+    writeCsr!("sepc")(cast(void*)userPc);
 }
 
-void handle_syscall(trap_frame* f)
+void handleSyscall(TrapFrame* f)
 {
     switch (f.a3)
     {
@@ -160,8 +149,8 @@ void handle_syscall(trap_frame* f)
         }
         break;
     case SYS_EXIT:
-        printf!"process %d exited\n"(current_proc.pid);
-        current_proc.state = PROC_EXITED;
+        printf!"process %d exited\n"(currentProc.pid);
+        currentProc.state = PROC_EXITED;
         yield();
         panic!("unreachable");
         break;
@@ -170,7 +159,7 @@ void handle_syscall(trap_frame* f)
         const char* filename = cast(const char*) f.a0;
         char* buf = cast(char*) f.a1;
         int len = f.a2;
-        file* file = fs_lookup(filename);
+        File* file = fsLookup(filename);
         if (file is null)
         {
             printf!"file not found: %s\n"(filename);
@@ -187,7 +176,7 @@ void handle_syscall(trap_frame* f)
         {
             memcpy(file.data.ptr, buf, len);
             file.size = len;
-            fs_flush();
+            fsFlush();
         }
         else
         {
@@ -201,112 +190,53 @@ void handle_syscall(trap_frame* f)
     }
 }
 
+enum string kernelEntryAsm = `
+    # 実行中プロセスのカーネルスタックをsscratchから取り出す
+    # tmp = sp; sp = sscratch; sscratch = tmp;
+    csrrw sp, sscratch, sp
+    addi sp, sp, -` ~ toDecString!trapFrameStackSize ~ "\n"
+    ~ regOps!("sw", TrapFrame) ~ `
+    # 例外発生時のspを取り出して保存
+    csrr a0, sscratch
+    sw a0, ` ~ toDecString!(TrapFrame.sp.offsetof) ~ `(sp)
+
+    # カーネルスタックを設定し直す
+    addi a0, sp, ` ~ toDecString!trapFrameStackSize ~ `
+    csrw sscratch, a0
+
+    mv a0, sp
+    call handleTrap
+` ~ regOps!("lw", TrapFrame) ~ `
+    lw sp, ` ~ toDecString!(TrapFrame.sp.offsetof) ~ `(sp)
+    sret
+`;
+
 @section(".text.trap")
-@naked void kernel_entry()
+@naked void kernelEntry()
 {
-    __asm(`
-        # 実行中プロセスのカーネルスタックをsscratchから取り出す
-        # tmp = sp; sp = sscratch; sscratch = tmp;
-        csrrw sp, sscratch, sp
-
-        addi sp, sp, -4 * 31
-        sw ra,  4 * 0(sp)
-        sw gp,  4 * 1(sp)
-        sw tp,  4 * 2(sp)
-        sw t0,  4 * 3(sp)
-        sw t1,  4 * 4(sp)
-        sw t2,  4 * 5(sp)
-        sw t3,  4 * 6(sp)
-        sw t4,  4 * 7(sp)
-        sw t5,  4 * 8(sp)
-        sw t6,  4 * 9(sp)
-        sw a0,  4 * 10(sp)
-        sw a1,  4 * 11(sp)
-        sw a2,  4 * 12(sp)
-        sw a3,  4 * 13(sp)
-        sw a4,  4 * 14(sp)
-        sw a5,  4 * 15(sp)
-        sw a6,  4 * 16(sp)
-        sw a7,  4 * 17(sp)
-        sw s0,  4 * 18(sp)
-        sw s1,  4 * 19(sp)
-        sw s2,  4 * 20(sp)
-        sw s3,  4 * 21(sp)
-        sw s4,  4 * 22(sp)
-        sw s5,  4 * 23(sp)
-        sw s6,  4 * 24(sp)
-        sw s7,  4 * 25(sp)
-        sw s8,  4 * 26(sp)
-        sw s9,  4 * 27(sp)
-        sw s10, 4 * 28(sp)
-        sw s11, 4 * 29(sp)
-
-        # 例外発生時のspを取り出して保存
-        csrr a0, sscratch
-        sw a0, 4 * 30(sp)
-
-        # カーネルスタックを設定し直す
-        addi a0, sp, 4 * 31
-        csrw sscratch, a0
-
-        mv a0, sp
-        call handle_trap
-
-        lw ra,  4 * 0(sp)
-        lw gp,  4 * 1(sp)
-        lw tp,  4 * 2(sp)
-        lw t0,  4 * 3(sp)
-        lw t1,  4 * 4(sp)
-        lw t2,  4 * 5(sp)
-        lw t3,  4 * 6(sp)
-        lw t4,  4 * 7(sp)
-        lw t5,  4 * 8(sp)
-        lw t6,  4 * 9(sp)
-        lw a0,  4 * 10(sp)
-        lw a1,  4 * 11(sp)
-        lw a2,  4 * 12(sp)
-        lw a3,  4 * 13(sp)
-        lw a4,  4 * 14(sp)
-        lw a5,  4 * 15(sp)
-        lw a6,  4 * 16(sp)
-        lw a7,  4 * 17(sp)
-        lw s0,  4 * 18(sp)
-        lw s1,  4 * 19(sp)
-        lw s2,  4 * 20(sp)
-        lw s3,  4 * 21(sp)
-        lw s4,  4 * 22(sp)
-        lw s5,  4 * 23(sp)
-        lw s6,  4 * 24(sp)
-        lw s7,  4 * 25(sp)
-        lw s8,  4 * 26(sp)
-        lw s9,  4 * 27(sp)
-        lw s10, 4 * 28(sp)
-        lw s11, 4 * 29(sp)
-        lw sp,  4 * 30(sp)
-        sret
-    `, "");
+    __asm(kernelEntryAsm, "");
 }
 
 extern __gshared ubyte[0] __free_ram;
 extern __gshared ubyte[0] __free_ram_end;
 
-alias paddr_t = uint;
-alias vaddr_t = uint;
+alias PAddr = uint;
+alias VAddr = uint;
 
 enum uint PAGE_SIZE = 4096;
 
-__gshared paddr_t next_paddr = 0;
+__gshared PAddr nextPaddr = 0;
 
-paddr_t alloc_pages(uint n)
+PAddr allocPages(uint n)
 {
-    if (next_paddr == 0)
+    if (nextPaddr == 0)
     {
-        next_paddr = cast(paddr_t) __free_ram.ptr;
+        nextPaddr = cast(PAddr) __free_ram.ptr;
     }
-    paddr_t paddr = next_paddr;
-    next_paddr += n * PAGE_SIZE;
+    PAddr paddr = nextPaddr;
+    nextPaddr += n * PAGE_SIZE;
 
-    if (next_paddr > cast(paddr_t) __free_ram_end.ptr)
+    if (nextPaddr > cast(PAddr) __free_ram_end.ptr)
     {
         panic!("Out of memory");
     }
@@ -320,60 +250,56 @@ enum PROC_UNUSED = 0;   // 未使用のプロセス管理構造体
 enum PROC_RUNNABLE = 1;   // 実行可能なプロセス
 enum PROC_EXITED = 2;
 
-struct process
+struct Process
 {
     int pid;
     int state;
-    vaddr_t sp; // コンテキストスイッチ時のスタックポインタ
-    uint* page_table;
-    ubyte[8192] stack; // カーネルスタック
+    VAddr sp; // コンテキストスイッチ時のスタックポインタ
+    uint* pageTable;
+    align(16) ubyte[8192] stack; // カーネルスタック
+
+    ubyte* stackTop()
+    {
+        return stack.ptr + stack.length;
+    }
 }
 
-__gshared process[PROC_MAX] procs;
+static assert(Process.alignof == 16 && Process.stack.offsetof % 16 == 0);
 
-@naked void switch_context(uint* prev_sp, uint* next_sp)
+__gshared Process[PROC_MAX] procs;
+
+struct SwitchFrame
+{
+    uint ra;
+    uint s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
+}
+
+static assert(SwitchFrame.sizeof == 13 * 4);
+
+enum switchFrameStackSize = alignUp!16(SwitchFrame.sizeof);
+static assert(switchFrameStackSize == 64);
+
+enum string switchContextAsm = `
+    addi sp, sp, -` ~ toDecString!switchFrameStackSize ~ "\n"
+    ~ regOps!("sw", SwitchFrame) ~ `
+    sw sp, (a0)
+    lw sp, (a1)
+` ~ regOps!("lw", SwitchFrame) ~ `
+    addi sp, sp, ` ~ toDecString!switchFrameStackSize ~ `
+    ret
+`;
+
+@naked void switchContext(uint* prevSp, uint* nextSp)
 {
     pragma(inline, false);
-    __asm(`
-        addi sp, sp, -13 * 4
-        sw ra,  0  * 4(sp)
-        sw s0,  1  * 4(sp)
-        sw s1,  2  * 4(sp)
-        sw s2,  3  * 4(sp)
-        sw s3,  4  * 4(sp)
-        sw s4,  5  * 4(sp)
-        sw s5,  6  * 4(sp)
-        sw s6,  7  * 4(sp)
-        sw s7,  8  * 4(sp)
-        sw s8,  9  * 4(sp)
-        sw s9,  10 * 4(sp)
-        sw s10, 11 * 4(sp)
-        sw s11, 12 * 4(sp)
-        sw sp, (a0)
-        lw sp, (a1)
-        lw ra,  0  * 4(sp)
-        lw s0,  1  * 4(sp)
-        lw s1,  2  * 4(sp)
-        lw s2,  3  * 4(sp)
-        lw s3,  4  * 4(sp)
-        lw s4,  5  * 4(sp)
-        lw s5,  6  * 4(sp)
-        lw s6,  7  * 4(sp)
-        lw s7,  8  * 4(sp)
-        lw s8,  9  * 4(sp)
-        lw s9,  10 * 4(sp)
-        lw s10, 11 * 4(sp)
-        lw s11, 12 * 4(sp)
-        addi sp, sp, 13 * 4
-        ret
-    `, "");
+    __asm(switchContextAsm, "");
 }
 
 extern __gshared ubyte[0] __kernel_base;
 
-process* create_process(const void* image, size_t image_size)
+Process* createProcess(const void* image, size_t imageSize)
 {
-    process* proc = null;
+    Process* proc = null;
     int i;
     for (i = 0; i < PROC_MAX; i++)
     {
@@ -389,60 +315,49 @@ process* create_process(const void* image, size_t image_size)
         panic!("No free process slots");
     }
 
-    // switch_context() で復帰できるように、
+    // switchContext() で復帰できるように、
     // スタックに呼び出し先保存レジスタを積む
-    auto sp = cast(uint*) (proc.stack.ptr + proc.stack.sizeof);
-    *--sp = 0;     // s11
-    *--sp = 0;     // s10
-    *--sp = 0;     // s9
-    *--sp = 0;     // s8
-    *--sp = 0;     // s7
-    *--sp = 0;     // s6
-    *--sp = 0;     // s5
-    *--sp = 0;     // s4
-    *--sp = 0;     // s3
-    *--sp = 0;     // s2
-    *--sp = 0;     // s1
-    *--sp = 0;     // s0
-    *--sp = cast(uint) &user_entry;    // ra
+    auto frame = cast(SwitchFrame*) (proc.stackTop() - switchFrameStackSize);
+    *frame = SwitchFrame.init;
+    frame.ra = cast(uint) &userEntry;
 
-    uint* page_table = cast(uint*) alloc_pages(1);
+    uint* pageTable = cast(uint*) allocPages(1);
 
     // カーネルのページをマッピングする
-    for (paddr_t paddr = cast(paddr_t) __kernel_base.ptr;
-         paddr < cast(paddr_t) __free_ram_end.ptr; paddr += PAGE_SIZE)
+    for (PAddr paddr = cast(PAddr) __kernel_base.ptr;
+         paddr < cast(PAddr) __free_ram_end.ptr; paddr += PAGE_SIZE)
     {
-        map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+        mapPage(pageTable, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
     }
-    map_page(page_table, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
+    mapPage(pageTable, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
 
     // ユーザーのページをマッピングする
-    for (uint off; off < image_size; off += PAGE_SIZE)
+    for (uint off; off < imageSize; off += PAGE_SIZE)
     {
-        paddr_t page = alloc_pages(1);
+        PAddr page = allocPages(1);
         memcpy(cast(void*) page, image + off, PAGE_SIZE);
-        map_page(page_table, USER_BASE + off, page,
+        mapPage(pageTable, USER_BASE + off, page,
                  PAGE_U | PAGE_R | PAGE_W | PAGE_X);
     }
 
     // 各フィールドを初期化
     proc.pid = i + 1;
     proc.state = PROC_RUNNABLE;
-    proc.sp = cast(uint) sp;
-    proc.page_table = page_table;
+    proc.sp = cast(uint) frame;
+    proc.pageTable = pageTable;
     return proc;
 }
 
-__gshared process* current_proc; // 現在実行中のプロセス
-__gshared process* idle_proc;    // アイドルプロセス
+__gshared Process* currentProc; // 現在実行中のプロセス
+__gshared Process* idleProc;    // アイドルプロセス
 
 void yield()
 {
     // 実行可能なプロセスを探す
-    process* next = idle_proc;
+    Process* next = idleProc;
     foreach (i; 0 .. PROC_MAX)
     {
-        process* proc = &procs[(current_proc.pid + i) % PROC_MAX];
+        Process* proc = &procs[(currentProc.pid + i) % PROC_MAX];
         if (proc.state == PROC_RUNNABLE && proc.pid > 0)
         {
             next = proc;
@@ -452,12 +367,12 @@ void yield()
 
     // 現在実行中のプロセス以外に、実行可能なプロセスがない。
     // 戻って処理を続行する
-    if (next == current_proc)
+    if (next == currentProc)
         return;
 
     // コンテキストスイッチ
-    process* prev = current_proc;
-    current_proc = next;
+    Process* prev = currentProc;
+    currentProc = next;
 
     __asm(`
             sfence.vma
@@ -466,11 +381,11 @@ void yield()
             csrw sscratch, $1
         `,
         "r,r",
-        (SATP_SV32 | (cast(uint) next.page_table / PAGE_SIZE)),
-        cast(uint*) (next.stack.ptr + next.stack.sizeof)
+        (SATP_SV32 | (cast(uint) next.pageTable / PAGE_SIZE)),
+        next.stackTop()
     );
 
-    switch_context(&prev.sp, &next.sp);
+    switchContext(&prev.sp, &next.sp);
 }
 
 enum uint SATP_SV32 = 1 << 31;
@@ -480,7 +395,7 @@ enum uint PAGE_W = 1 << 2;   // 書き込み可能
 enum uint PAGE_X = 1 << 3;   // 実行可能
 enum uint PAGE_U = 1 << 4;   // ユーザーモードでアクセス可能
 
-void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
+void mapPage(uint* table1, uint vaddr, PAddr paddr, uint flags)
 {
     if ((vaddr & (PAGE_SIZE - 1)) != 0)
     {
@@ -496,8 +411,8 @@ void map_page(uint* table1, uint vaddr, paddr_t paddr, uint flags)
     if ((table1[vpn1] & PAGE_V) == 0)
     {
         // 2段目のページテーブルが存在しないので作成する
-        uint pt_paddr = alloc_pages(1);
-        table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
+        uint ptPaddr = allocPages(1);
+        table1[vpn1] = ((ptPaddr / PAGE_SIZE) << 10) | PAGE_V;
     }
 
     // 2段目のページテーブルにエントリを追加する
@@ -514,7 +429,7 @@ extern __gshared ubyte[0] _binary_shell_bin_size;
 enum SSTATUS_SPIE = 1 << 5;
 enum SSTATUS_SUM = 1 << 18;
 
-@naked void user_entry()
+@naked void userEntry()
 {
     __asm(`
         li t0, $0
@@ -551,7 +466,7 @@ enum uint VIRTQ_AVAIL_F_NO_INTERRUPT = 1;
 enum uint VIRTIO_BLK_T_IN  = 0;
 enum uint VIRTIO_BLK_T_OUT = 1;
 
-struct virtq_desc
+struct VirtqDesc
 {
 align(1):
     ulong addr;
@@ -560,7 +475,7 @@ align(1):
     ushort next;
 }
 
-struct virtq_avail
+struct VirtqAvail
 {
 align(1):
     ushort flags;
@@ -568,33 +483,33 @@ align(1):
     ushort[VIRTQ_ENTRY_NUM] ring;
 }
 
-struct virtq_used_elem
+struct VirtqUsedElem
 {
 align(1):
     uint id;
     uint len;
 }
 
-struct virtq_used
+struct VirtqUsed
 {
 align(1):
     ushort flags;
     ushort index;
-    virtq_used_elem[VIRTQ_ENTRY_NUM] ring;
+    VirtqUsedElem[VIRTQ_ENTRY_NUM] ring;
 }
 
-struct virtio_virtq
+struct VirtioVirtq
 {
 align(1):
-    virtq_desc[VIRTQ_ENTRY_NUM] descs;
-    virtq_avail avail;
-    align(PAGE_SIZE) virtq_used used;
-    int queue_index;
-    ushort* used_index;
-    ushort last_used_index;
+    VirtqDesc[VIRTQ_ENTRY_NUM] descs;
+    VirtqAvail avail;
+    align(PAGE_SIZE) VirtqUsed used;
+    int queueIndex;
+    ushort* usedIndex;
+    ushort lastUsedIndex;
 }
 
-struct virtio_blk_req
+struct VirtioBlkReq
 {
 align(1):
     // 1つ目のディスクリプタ: デバイスからは読み込み専用
@@ -609,163 +524,163 @@ align(1):
     ubyte status;
 }
 
-uint virtio_reg_read32(uint offset)
+uint virtioRegRead32(uint offset)
 {
     return volatileLoad(cast(uint*) (VIRTIO_BLK_PADDR + offset));
 }
 
-ulong virtio_reg_read64(uint offset)
+ulong virtioRegRead64(uint offset)
 {
     return volatileLoad(cast(ulong*) (VIRTIO_BLK_PADDR + offset));
 }
 
-void virtio_reg_write32(uint offset, uint value)
+void virtioRegWrite32(uint offset, uint value)
 {
     volatileStore(cast(uint*) (VIRTIO_BLK_PADDR + offset), value);
 }
 
-void virtio_reg_fetch_and_or32(uint offset, uint value)
+void virtioRegFetchAndOr32(uint offset, uint value)
 {
-    virtio_reg_write32(offset, virtio_reg_read32(offset) | value);
+    virtioRegWrite32(offset, virtioRegRead32(offset) | value);
 }
 
-__gshared virtio_virtq* blk_request_vq;
-__gshared virtio_blk_req* blk_req;
-__gshared paddr_t blk_req_paddr;
-__gshared uint blk_capacity;
+__gshared VirtioVirtq* blkRequestVq;
+__gshared VirtioBlkReq* blkReq;
+__gshared PAddr blkReqPaddr;
+__gshared uint blkCapacity;
 
-void virtio_blk_init()
+void virtioBlkInit()
 {
-    if (virtio_reg_read32(VIRTIO_REG_MAGIC) != 0x74726976)
+    if (virtioRegRead32(VIRTIO_REG_MAGIC) != 0x74726976)
     {
         panic!("virtio: invalid magic value");
     }
-    if (virtio_reg_read32(VIRTIO_REG_VERSION) != 1)
+    if (virtioRegRead32(VIRTIO_REG_VERSION) != 1)
     {
         panic!("virtio: invalid version");
     }
-    if (virtio_reg_read32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_BLK)
+    if (virtioRegRead32(VIRTIO_REG_DEVICE_ID) != VIRTIO_DEVICE_BLK)
     {
         panic!("virtio: invalid device id");
     }
 
     // 1. Reset the device.
-    virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, 0);
+    virtioRegWrite32(VIRTIO_REG_DEVICE_STATUS, 0);
     // 2. Set the ACKNOWLEDGE status bit: the guest OS has noticed the device.
-    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
+    virtioRegFetchAndOr32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_ACK);
     // 3. Set the DRIVER status bit.
-    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
+    virtioRegFetchAndOr32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER);
     // 5. Set the FEATURES_OK status bit.
-    virtio_reg_fetch_and_or32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
+    virtioRegFetchAndOr32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_FEAT_OK);
     // 7. Perform device-specific setup, including discovery of virtqueues for the device
-    blk_request_vq = virtq_init(0);
+    blkRequestVq = virtqInit(0);
     // 8. Set the DRIVER_OK status bit.
-    virtio_reg_write32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
+    virtioRegWrite32(VIRTIO_REG_DEVICE_STATUS, VIRTIO_STATUS_DRIVER_OK);
 
     // ディスクの容量を取得
-    blk_capacity = cast(uint) (virtio_reg_read64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE);
-    printf!"virtio-blk: capacity is %d bytes\n"(blk_capacity);
+    blkCapacity = cast(uint) (virtioRegRead64(VIRTIO_REG_DEVICE_CONFIG + 0) * SECTOR_SIZE);
+    printf!"virtio-blk: capacity is %d bytes\n"(blkCapacity);
 
     // デバイスへの処理要求を格納する領域を確保
-    blk_req_paddr = alloc_pages(alignUp!(PAGE_SIZE)((*blk_req).sizeof) / PAGE_SIZE);
-    blk_req = cast(virtio_blk_req*) blk_req_paddr;
+    blkReqPaddr = allocPages(alignUp!(PAGE_SIZE)((*blkReq).sizeof) / PAGE_SIZE);
+    blkReq = cast(VirtioBlkReq*) blkReqPaddr;
 }
 
-virtio_virtq* virtq_init(uint index)
+VirtioVirtq* virtqInit(uint index)
 {
-    paddr_t virtq_paddr = alloc_pages(alignUp!(PAGE_SIZE)(virtio_virtq.sizeof) / PAGE_SIZE);
-    virtio_virtq* vq = cast(virtio_virtq*) virtq_paddr;
-    vq.queue_index = index;
-    vq.used_index = cast(ushort*) &vq.used.index;
+    PAddr virtqPaddr = allocPages(alignUp!(PAGE_SIZE)(VirtioVirtq.sizeof) / PAGE_SIZE);
+    VirtioVirtq* vq = cast(VirtioVirtq*) virtqPaddr;
+    vq.queueIndex = index;
+    vq.usedIndex = cast(ushort*) &vq.used.index;
     // 1. Select the queue writing its index (first queue is 0) to QueueSel.
-    virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
+    virtioRegWrite32(VIRTIO_REG_QUEUE_SEL, index);
     // 5. Notify the device about the queue size by writing the size to QueueNum.
-    virtio_reg_write32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
+    virtioRegWrite32(VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
     // 6. Notify the device about the used alignment by writing its value in bytes to QueueAlign.
-    virtio_reg_write32(VIRTIO_REG_QUEUE_ALIGN, 0);  
+    virtioRegWrite32(VIRTIO_REG_QUEUE_ALIGN, 0);
     // 7. Write the physical number of the first page of the queue to the QueuePFN register.
-    virtio_reg_write32(VIRTIO_REG_QUEUE_PFN, virtq_paddr);
+    virtioRegWrite32(VIRTIO_REG_QUEUE_PFN, virtqPaddr);
     return vq;
 }
 
-// デバイスに新しいリクエストがあることを通知する。desc_indexは、新しいリクエストの
+// デバイスに新しいリクエストがあることを通知する。descIndexは、新しいリクエストの
 // 先頭ディスクリプタのインデックス。
-void virtq_kick(virtio_virtq* vq, int desc_index)
+void virtqKick(VirtioVirtq* vq, int descIndex)
 {
     pragma(inline, false);
-    vq.avail.ring[vq.avail.index % VIRTQ_ENTRY_NUM] = cast(ushort) desc_index;
+    vq.avail.ring[vq.avail.index % VIRTQ_ENTRY_NUM] = cast(ushort) descIndex;
     vq.avail.index++;
     // オリジナルに合わせるためにCrossThreadを指定
     llvm_memory_fence(DefaultOrdering, SynchronizationScope.CrossThread);
-    virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq.queue_index);
-    vq.last_used_index++;
+    virtioRegWrite32(VIRTIO_REG_QUEUE_NOTIFY, vq.queueIndex);
+    vq.lastUsedIndex++;
 }
 
 // デバイスが処理中のリクエストがあるかどうかを返す。
-bool virtq_is_busy(virtio_virtq* vq)
+bool virtqIsBusy(VirtioVirtq* vq)
 {
-    return vq.last_used_index != volatileLoad(vq.used_index);
+    return vq.lastUsedIndex != volatileLoad(vq.usedIndex);
 }
 
 // virtio-blkデバイスの読み書き。
-void read_write_disk(void* buf, uint sector, int is_write)
+void readWriteDisk(void* buf, uint sector, int isWrite)
 {
-    if (sector >= blk_capacity / SECTOR_SIZE)
+    if (sector >= blkCapacity / SECTOR_SIZE)
     {
         printf!"virtio: tried to read/write sector=%d, but capacity is %d\n"(
-              sector, blk_capacity / SECTOR_SIZE);
+              sector, blkCapacity / SECTOR_SIZE);
         return;
     }
 
     // virtio-blkの仕様に従って、リクエストを構築する
-    blk_req.sector = sector;
-    blk_req.type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
-    if (is_write)
+    blkReq.sector = sector;
+    blkReq.type = isWrite ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
+    if (isWrite)
     {
-        memcpy(blk_req.data.ptr, buf, SECTOR_SIZE);
+        memcpy(blkReq.data.ptr, buf, SECTOR_SIZE);
     }
 
     // virtqueueのディスクリプタを構築する (3つのディスクリプタを使う)
-    virtio_virtq* vq = blk_request_vq;
-    vq.descs[0].addr = blk_req_paddr;
+    VirtioVirtq* vq = blkRequestVq;
+    vq.descs[0].addr = blkReqPaddr;
     vq.descs[0].len = uint.sizeof * 2 + ulong.sizeof;
     vq.descs[0].flags = VIRTQ_DESC_F_NEXT;
     vq.descs[0].next = 1;
 
-    vq.descs[1].addr = blk_req_paddr + virtio_blk_req.data.offsetof;
+    vq.descs[1].addr = blkReqPaddr + VirtioBlkReq.data.offsetof;
     vq.descs[1].len = SECTOR_SIZE;
-    vq.descs[1].flags = VIRTQ_DESC_F_NEXT | (is_write ? 0 : VIRTQ_DESC_F_WRITE);
+    vq.descs[1].flags = VIRTQ_DESC_F_NEXT | (isWrite ? 0 : VIRTQ_DESC_F_WRITE);
     vq.descs[1].next = 2;
 
-    vq.descs[2].addr = blk_req_paddr + virtio_blk_req.status.offsetof;
+    vq.descs[2].addr = blkReqPaddr + VirtioBlkReq.status.offsetof;
     vq.descs[2].len = ubyte.sizeof;
     vq.descs[2].flags = VIRTQ_DESC_F_WRITE;
 
     // デバイスに新しいリクエストがあることを通知する
-    virtq_kick(vq, 0);
+    virtqKick(vq, 0);
 
     // デバイス側の処理が終わるまで待つ
-    while (virtq_is_busy(vq)) {}
+    while (virtqIsBusy(vq)) {}
 
     // virtio-blk: 0でない値が返ってきたらエラー
-    if (blk_req.status != 0)
+    if (blkReq.status != 0)
     {
         printf!"virtio: warn: failed to read/write sector=%d status=%d\n"(
-               sector, blk_req.status);
+               sector, blkReq.status);
         return;
     }
 
     // 読み込み処理の場合は、バッファにデータをコピーする
-    if (!is_write)
+    if (!isWrite)
     {
-        memcpy(buf, blk_req.data.ptr, SECTOR_SIZE);
+        memcpy(buf, blkReq.data.ptr, SECTOR_SIZE);
     }
 }
 
 enum FILES_MAX     = 2;
-enum DISK_MAX_SIZE = alignUp!(SECTOR_SIZE)(file.sizeof * FILES_MAX);
+enum DISK_MAX_SIZE = alignUp!(SECTOR_SIZE)(File.sizeof * FILES_MAX);
 
-struct tar_header
+struct TarHeader
 {
 align(1):
     char[100] name;
@@ -788,15 +703,15 @@ align(1):
     char[0] data;      // ヘッダに続くデータ領域を指す配列 (フレキシブル配列メンバ)
 }
 
-struct file
+struct File
 {
-    bool in_use;      // このファイルエントリが使われているか
+    bool inUse;      // このファイルエントリが使われているか
     char[100] name;   // ファイル名
     char[1024] data;  // ファイルの内容
     size_t size;      // ファイルサイズ
 }
 
-__gshared file[FILES_MAX] files;
+__gshared File[FILES_MAX] files;
 __gshared ubyte[DISK_MAX_SIZE] disk;
 
 int oct2int(char* oct, int len)
@@ -812,15 +727,15 @@ int oct2int(char* oct, int len)
     return dec;
 }
 
-void fs_init()
+void fsInit()
 {
     for (uint sector = 0; sector < disk.sizeof / SECTOR_SIZE; sector++)
-        read_write_disk(&disk[sector * SECTOR_SIZE], sector, false);
+        readWriteDisk(&disk[sector * SECTOR_SIZE], sector, false);
 
     uint off = 0;
     for (int i = 0; i < FILES_MAX; i++)
     {
-        tar_header* header = cast(tar_header*) &disk[off];
+        TarHeader* header = cast(TarHeader*) &disk[off];
         if (header.name[0] == '\0')
         {
             break;
@@ -832,31 +747,31 @@ void fs_init()
         }
 
         int filesz = oct2int(header.size.ptr, header.size.sizeof);
-        file* file = &files[i];
-        file.in_use = true;
+        File* file = &files[i];
+        file.inUse = true;
         strcpy(file.name.ptr, header.name.ptr);
         memcpy(file.data.ptr, header.data.ptr, filesz);
         file.size = filesz;
         printf!"file: %s, size=%d\n"(file.name.ptr, file.size);
 
-        off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + filesz);
+        off += alignUp!(SECTOR_SIZE)(TarHeader.sizeof + filesz);
     }
 }
 
-void fs_flush()
+void fsFlush()
 {
     // files変数の各ファイルの内容をdisk変数に書き込む
     memset(disk.ptr, 0, disk.sizeof);
     uint off = 0;
-    for (int file_i = 0; file_i < FILES_MAX; file_i++)
+    for (int fileIndex = 0; fileIndex < FILES_MAX; fileIndex++)
     {
-        file* file = &files[file_i];
-        if (!file.in_use)
+        File* file = &files[fileIndex];
+        if (!file.inUse)
         {
             continue;
         }
 
-        tar_header* header = cast(tar_header*) &disk[off];
+        TarHeader* header = cast(TarHeader*) &disk[off];
         memset(header, 0, (*header).sizeof);
         strcpy(header.name.ptr, file.name.ptr);
         strcpy(header.mode.ptr, "000644");
@@ -877,7 +792,7 @@ void fs_flush()
 
         // チェックサムを計算
         int checksum = ' ' * header.checksum.sizeof;
-        for (uint i = 0; i < tar_header.sizeof; i++)
+        for (uint i = 0; i < TarHeader.sizeof; i++)
         {
             checksum += cast(ubyte) disk[off + i];
         }
@@ -890,37 +805,37 @@ void fs_flush()
 
         // ファイルデータをコピー
         memcpy(header.data.ptr, file.data.ptr, file.size);
-        off += alignUp!(SECTOR_SIZE)(tar_header.sizeof + file.size);
+        off += alignUp!(SECTOR_SIZE)(TarHeader.sizeof + file.size);
     }
 
     // disk変数の内容をディスクに書き込む
     for (uint sector = 0; sector < disk.sizeof / SECTOR_SIZE; sector++)
     {
-        read_write_disk(&disk[sector * SECTOR_SIZE], sector, true);
+        readWriteDisk(&disk[sector * SECTOR_SIZE], sector, true);
     }
 
     printf!"wrote %d bytes to disk\n"(disk.sizeof);
 }
 
-void kernel_main()
+void kernelMain()
 {
     memset(__bss.ptr, 0, __bss_end.ptr - __bss.ptr);
-    WRITE_CSR!"stvec"(&kernel_entry);
-    virtio_blk_init();
-    fs_init();
+    writeCsr!"stvec"(&kernelEntry);
+    virtioBlkInit();
+    fsInit();
 
     char[SECTOR_SIZE] buf;
-    read_write_disk(buf.ptr, 0, false);
+    readWriteDisk(buf.ptr, 0, false);
     printf!"first sector: %s\n"(buf.ptr);
 
     strcpy(buf.ptr, "hello from kernel!!!\n");
-    read_write_disk(buf.ptr, 0, true);
+    readWriteDisk(buf.ptr, 0, true);
 
-    idle_proc = create_process(null, 0);
-    idle_proc.pid = -1;
-    current_proc = idle_proc;
+    idleProc = createProcess(null, 0);
+    idleProc.pid = -1;
+    currentProc = idleProc;
 
-    create_process(_binary_shell_bin_start.ptr, cast(size_t) _binary_shell_bin_size.ptr);
+    createProcess(_binary_shell_bin_start.ptr, cast(size_t) _binary_shell_bin_size.ptr);
 
     yield();
     panic!("switched to idle process\n");
@@ -938,6 +853,6 @@ void kernel_main()
 {
     __asm(`
         la sp, __stack_top
-        j kernel_main
+        j kernelMain
     `, "");
 }
