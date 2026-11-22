@@ -41,7 +41,12 @@ prompt:
         else if (strcmp(cmdline.ptr, "readfile".ptr) == 0)
         {
             char[128] buf = 0;
-            int len = readfile("hello.txt".ptr, buf.ptr, buf.length);
+            int len = readfile("hello.txt".ptr, buf.ptr, buf.length - 1);
+            if (len < 0)
+            {
+                printf!"readfile failed\n"();
+                continue;
+            }
             buf[len] = '\0';
             printf!"%s\n"(buf.ptr);
         }

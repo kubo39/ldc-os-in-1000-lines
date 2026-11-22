@@ -167,19 +167,28 @@ void handleSyscall(TrapFrame* f)
             break;
         }
 
-        if (len > cast(int) file.data.sizeof)
+        if (len < 0)
         {
-            len = file.size;
+            f.a0 = -1;
+            break;
         }
 
         if (f.a3 == SYS_WRITEFILE)
         {
+            if (len > cast(int) file.data.sizeof)
+            {
+                len = cast(int) file.data.sizeof;
+            }
             memcpy(file.data.ptr, buf, len);
             file.size = len;
             fsFlush();
         }
         else
         {
+            if (len > cast(int) file.size)
+            {
+                len = cast(int) file.size;
+            }
             memcpy(buf, file.data.ptr, len);
         }
 
@@ -335,7 +344,8 @@ Process* createProcess(const void* image, size_t imageSize)
     for (uint off; off < imageSize; off += PAGE_SIZE)
     {
         PAddr page = allocPages(1);
-        memcpy(cast(void*) page, image + off, PAGE_SIZE);
+        size_t remaining = imageSize - off;
+        memcpy(cast(void*) page, image + off, remaining < PAGE_SIZE ? remaining : PAGE_SIZE);
         mapPage(pageTable, USER_BASE + off, page,
                  PAGE_U | PAGE_R | PAGE_W | PAGE_X);
     }
@@ -357,7 +367,7 @@ void yield()
     Process* next = idleProc;
     foreach (i; 0 .. PROC_MAX)
     {
-        Process* proc = &procs[(currentProc.pid + i) % PROC_MAX];
+        Process* proc = &procs[(currentProc.pid + i + PROC_MAX) % PROC_MAX];
         if (proc.state == PROC_RUNNABLE && proc.pid > 0)
         {
             next = proc;
@@ -678,7 +688,7 @@ void readWriteDisk(void* buf, uint sector, int isWrite)
 }
 
 enum FILES_MAX     = 2;
-enum DISK_MAX_SIZE = alignUp!(SECTOR_SIZE)(File.sizeof * FILES_MAX);
+enum DISK_MAX_SIZE = FILES_MAX * (TarHeader.sizeof + alignUp!(SECTOR_SIZE)(File.data.sizeof));
 
 struct TarHeader
 {
@@ -712,6 +722,8 @@ struct File
 }
 
 __gshared File[FILES_MAX] files;
+static assert(TarHeader.sizeof == SECTOR_SIZE);
+
 __gshared ubyte[DISK_MAX_SIZE] disk;
 
 int oct2int(char* oct, int len)
@@ -735,6 +747,11 @@ void fsInit()
     uint off = 0;
     for (int i = 0; i < FILES_MAX; i++)
     {
+        if (off + TarHeader.sizeof > disk.sizeof)
+        {
+            break;
+        }
+
         TarHeader* header = cast(TarHeader*) &disk[off];
         if (header.name[0] == '\0')
         {
@@ -747,6 +764,11 @@ void fsInit()
         }
 
         int filesz = oct2int(header.size.ptr, header.size.sizeof);
+        if (filesz > files[i].data.sizeof || off + TarHeader.sizeof + filesz > disk.sizeof)
+        {
+            panic!("file too large");
+        }
+
         File* file = &files[i];
         file.inUse = true;
         strcpy(file.name.ptr, header.name.ptr);
@@ -782,12 +804,11 @@ void fsFlush()
         // ファイルサイズを8進数文字列に変換
         {
             int filesz = file.size;
-            int i = 0;
-            do
+            for (int i = cast(int) header.size.sizeof - 2; i >= 0; i--)
             {
-                header.size[i++] = (filesz % 8) + '0';
+                header.size[i] = (filesz % 8) + '0';
                 filesz /= 8;
-            } while (filesz > 0);
+            }
         }
 
         // チェックサムを計算
@@ -823,13 +844,6 @@ void kernelMain()
     writeCsr!"stvec"(&kernelEntry);
     virtioBlkInit();
     fsInit();
-
-    char[SECTOR_SIZE] buf;
-    readWriteDisk(buf.ptr, 0, false);
-    printf!"first sector: %s\n"(buf.ptr);
-
-    strcpy(buf.ptr, "hello from kernel!!!\n");
-    readWriteDisk(buf.ptr, 0, true);
 
     idleProc = createProcess(null, 0);
     idleProc.pid = -1;
