@@ -128,14 +128,22 @@ void handleTrap(TrapFrame* f)
     writeCsr!("sepc")(cast(void*)userPc);
 }
 
+static assert(SysNo.max - SysNo.min + 1 == __traits(allMembers, SysNo).length);
+
 void handleSyscall(TrapFrame* f)
 {
-    switch (f.a3)
+    if (f.a3 < SysNo.min || f.a3 > SysNo.max)
     {
-    case SYS_PUTCHAR:
+        panic!("unexpected syscall");
+    }
+
+    const sysno = cast(SysNo) f.a3;
+    final switch (sysno)
+    {
+    case SysNo.putchar:
         putchar(cast(char) f.a0);
         break;
-    case SYS_GETCHAR:
+    case SysNo.getchar:
         while (true)
         {
             int ch = getchar();
@@ -148,14 +156,13 @@ void handleSyscall(TrapFrame* f)
             yield();
         }
         break;
-    case SYS_EXIT:
+    case SysNo.exit:
         printf!"process %d exited\n"(currentProc.pid);
         currentProc.state = PROC_EXITED;
         yield();
         panic!("unreachable");
         break;
-    case SYS_READFILE:
-    case SYS_WRITEFILE:
+    case SysNo.readFile, SysNo.writeFile:
         const char* filename = cast(const char*) f.a0;
         char* buf = cast(char*) f.a1;
         int len = f.a2;
@@ -173,7 +180,7 @@ void handleSyscall(TrapFrame* f)
             break;
         }
 
-        if (f.a3 == SYS_WRITEFILE)
+        if (sysno == SysNo.writeFile)
         {
             if (len > cast(int) file.data.sizeof)
             {
@@ -194,8 +201,6 @@ void handleSyscall(TrapFrame* f)
 
         f.a0 = len;
         break;
-    default:
-        panic!("unexpected syscall");
     }
 }
 

@@ -4,11 +4,14 @@ import ldc.llvmasm;
 
 extern (C):
 
-enum SYS_PUTCHAR = 1;
-enum SYS_GETCHAR = 2;
-enum SYS_EXIT = 3;
-enum SYS_READFILE = 4;
-enum SYS_WRITEFILE = 5;
+enum SysNo : uint
+{
+    putchar = 1,
+    getchar,
+    exit,
+    readFile,
+    writeFile,
+}
 
 void putchar(char);
 int getchar();

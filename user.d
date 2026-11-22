@@ -20,28 +20,28 @@ int syscall(int sysno, int arg0, int arg1, int arg2)
 
 void putchar(char ch)
 {
-    syscall(SYS_PUTCHAR, ch, 0, 0);
+    syscall(SysNo.putchar, ch, 0, 0);
 }
 
 int getchar()
 {
-    return syscall(SYS_GETCHAR, 0, 0, 0);
+    return syscall(SysNo.getchar, 0, 0, 0);
 }
 
 noreturn exit()
 {
-    syscall(SYS_EXIT, 0, 0, 0);
+    syscall(SysNo.exit, 0, 0, 0);
     for (;;) {}
 }
 
 int readfile(const char* filename, char* buf, int len)
 {
-    return syscall(SYS_READFILE, cast(int) filename, cast(int) buf, len);
+    return syscall(SysNo.readFile, cast(int) filename, cast(int) buf, len);
 }
 
 int writefile(const char* filename, const char* buf, int len)
 {
-    return syscall(SYS_WRITEFILE, cast(int) filename, cast(int) buf, len);
+    return syscall(SysNo.writeFile, cast(int) filename, cast(int) buf, len);
 }
 
 @section(".text.start")
