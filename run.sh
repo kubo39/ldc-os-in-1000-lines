@@ -13,13 +13,12 @@ DFLAGS="--mtriple=riscv32-unknown-none-elf --mattr=+m,+c,+relax --mabi=ilp32 -O2
 $LDC $DFLAGS -c -od=build/shell shell.d user.d common.d
 $LD -T user.ld -Map=shell.Map --gc-sections -o shell.elf \
     build/shell/shell.o build/shell/user.o build/shell/common.o
-$OBJCOPY --set-section-flags .bss=alloc,contents -O binary shell.elf shell.bin
-$OBJCOPY -Ibinary -Oelf32-littleriscv shell.bin shell.bin.o
+$OBJCOPY -O binary --set-section-flags .bss=alloc,contents shell.elf shell.bin
 
 # カーネルをビルド
-$LDC $DFLAGS -c -od=build/kernel kernel.d common.d
+$LDC $DFLAGS -J. -c -od=build/kernel kernel.d common.d
 $LD -T kernel.ld -Map=kernel.Map --gc-sections -o kernel.elf \
-    build/kernel/kernel.o build/kernel/common.o shell.bin.o
+    build/kernel/kernel.o build/kernel/common.o
 
 (cd disk && tar cf ../disk.tar --format=ustar *.txt)
 

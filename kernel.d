@@ -311,7 +311,7 @@ enum string switchContextAsm = `
 
 extern __gshared ubyte[0] __kernel_base;
 
-Process* createProcess(const void* image, size_t imageSize)
+Process* createProcess(const(ubyte)[] image)
 {
     Process* proc = null;
     int i;
@@ -346,11 +346,11 @@ Process* createProcess(const void* image, size_t imageSize)
     mapPage(pageTable, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
 
     // ユーザーのページをマッピングする
-    for (uint off; off < imageSize; off += PAGE_SIZE)
+    for (uint off; off < image.length; off += PAGE_SIZE)
     {
         PAddr page = allocPages(1);
-        size_t remaining = imageSize - off;
-        memcpy(cast(void*) page, image + off, remaining < PAGE_SIZE ? remaining : PAGE_SIZE);
+        size_t remaining = image.length - off;
+        memcpy(cast(void*) page, image.ptr + off, remaining < PAGE_SIZE ? remaining : PAGE_SIZE);
         mapPage(pageTable, USER_BASE + off, page,
                  PAGE_U | PAGE_R | PAGE_W | PAGE_X);
     }
@@ -438,11 +438,17 @@ void mapPage(uint* table1, uint vaddr, PAddr paddr, uint flags)
 
 enum USER_BASE = 0x1000000;
 
-extern __gshared ubyte[0] _binary_shell_bin_start;
-extern __gshared ubyte[0] _binary_shell_bin_size;
-
 enum SSTATUS_SPIE = 1 << 5;
 enum SSTATUS_SUM = 1 << 18;
+
+immutable ubyte[] shellImage = cast(immutable(ubyte)[]) import("shell.bin");
+
+uint elfEntry()(string elf)
+{
+    assert(elf.length >= 28 && elf[0 .. 4] == "\x7fELF", "check failed: cannot find elf magic.");
+    return elf[24] | (elf[25] << 8) | (elf[26] << 16) | (elf[27] << 24);
+}
+static assert(elfEntry(import("shell.elf")) == USER_BASE, "unmatched entry address.");
 
 @naked void userEntry()
 {
@@ -850,11 +856,11 @@ void kernelMain()
     virtioBlkInit();
     fsInit();
 
-    idleProc = createProcess(null, 0);
+    idleProc = createProcess(null);
     idleProc.pid = -1;
     currentProc = idleProc;
 
-    createProcess(_binary_shell_bin_start.ptr, cast(size_t) _binary_shell_bin_size.ptr);
+    createProcess(shellImage);
 
     yield();
     panic!("switched to idle process\n");
