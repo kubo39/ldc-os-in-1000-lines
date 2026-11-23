@@ -54,6 +54,15 @@ noreturn panic(string fmt, string file = __FILE__, int line = __LINE__)()
     }
 }
 
+noreturn __assert(const(char)* msg, const(char)* file, int line)
+{
+    printf!"PANIC: %s:%d: assertion failed: %s\n"(file, line, msg);
+    for (;;)
+    {
+        __asm("wfi", "");
+    }
+}
+
 File* fsLookup(const char* filename)
 {
     for (int i = 0; i < FILES_MAX; i++)

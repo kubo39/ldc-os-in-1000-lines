@@ -7,7 +7,7 @@ LDC=ldc2
 LD=ld.lld
 OBJCOPY=llvm-objcopy
 
-DFLAGS="--mtriple=riscv32-unknown-none-elf --mattr=+m,+c,+relax --mabi=ilp32 -O2 -fno-builtin --disable-simplify-libcalls --betterC -transition=tls --boundscheck=off --checkaction=halt --defaultlib= -relocation-model=static -g"
+DFLAGS="--mtriple=riscv32-unknown-none-elf --mattr=+m,+c,+relax --mabi=ilp32 -O2 -fno-builtin --disable-simplify-libcalls --betterC -transition=tls --checkaction=C --defaultlib= -relocation-model=static -g"
 
 # シェルをビルド
 $LDC $DFLAGS -c -od=build/shell shell.d user.d common.d

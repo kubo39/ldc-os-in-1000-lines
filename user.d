@@ -34,6 +34,12 @@ noreturn exit()
     for (;;) {}
 }
 
+noreturn __assert(const(char)* msg, const(char)* file, int line)
+{
+    printf!"assertion failed: %s:%d: %s\n"(file, line, msg);
+    exit();
+}
+
 int readfile(const char* filename, char* buf, int len)
 {
     return syscall(SysNo.readFile, cast(int) filename, cast(int) buf, len);
