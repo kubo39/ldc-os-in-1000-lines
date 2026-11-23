@@ -19,12 +19,12 @@ noreturn exit();
 int readfile(const char*, char*, int);
 int writefile(const char*, const char*, int);
 
-void* memset(void* buf, char c, size_t n)
+void* memset(void* buf, int c, size_t n)
 {
     ubyte* p = cast(ubyte*) buf;
     while (n--)
     {
-        *p++ = c;
+        *p++ = cast(ubyte) c;
     }
     return buf;
 }
@@ -38,6 +38,22 @@ void* memcpy(void* dst, const(void)* src, size_t n)
         *d++ = *s++;
     }
     return dst;
+}
+
+int memcmp(const(void)* s1, const(void)* s2, size_t n)
+{
+    const(ubyte)* p1 = cast(const(ubyte)*) s1;
+    const(ubyte)* p2 = cast(const(ubyte)*) s2;
+    while (n--)
+    {
+        if (*p1 != *p2)
+        {
+            return *p1 - *p2;
+        }
+        p1++;
+        p2++;
+    }
+    return 0;
 }
 
 char* strcpy(char* dst, const(char)* src)

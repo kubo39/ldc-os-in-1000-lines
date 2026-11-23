@@ -769,7 +769,7 @@ void fsInit()
             break;
         }
 
-        if (strcmp(header.magic.ptr, "ustar") != 0)
+        if (header.magic != "ustar\0")
         {
             panic!("invalid tar header:");
         }
