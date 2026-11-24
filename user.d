@@ -37,7 +37,29 @@ noreturn exit()
 noreturn __assert(const(char)* msg, const(char)* file, int line)
 {
     printf!"assertion failed: %s:%d: %s\n"(file, line, msg);
+    backtrace();
     exit();
+}
+
+pragma(inline, false)
+void backtrace()
+{
+    import ldc.intrinsics;
+    auto fp = cast(uint) llvm_frameaddress(0);
+    int depth = 0;
+    while (fp != 0 && (fp & 3) == 0 && depth < 16)
+    {
+        uint ra = *cast(uint*) (fp - 4);
+        if (ra == 0)
+            break;
+        putchar(cast(char) ('0' + depth / 10));
+        putchar(cast(char) ('0' + depth % 10));
+        putchar(':');
+        putHex(ra - 2);
+        putchar('\n');
+        fp = *cast(uint*) (fp - 8);
+        depth++;
+    }
 }
 
 int readfile(const char* filename, char* buf, int len)
@@ -55,6 +77,8 @@ int writefile(const char* filename, const char* buf, int len)
 {
     __asm(`
         la sp, __stack_top
+        li fp, 0
+        li ra, 0
         call main
         call exit
     `, "");

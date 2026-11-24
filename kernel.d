@@ -887,6 +887,8 @@ void kernelMain()
 {
     __asm(`
         la sp, __stack_top
+        li fp, 0
+        li ra, 0
         j kernelMain
     `, "");
 }
