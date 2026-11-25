@@ -52,11 +52,7 @@ void backtrace()
         uint ra = *cast(uint*) (fp - 4);
         if (ra == 0)
             break;
-        putchar(cast(char) ('0' + depth / 10));
-        putchar(cast(char) ('0' + depth % 10));
-        putchar(':');
-        putHex(ra - 2);
-        putchar('\n');
+        printf!"  #%d:%x\n"(depth, ra - 2);
         fp = *cast(uint*) (fp - 8);
         depth++;
     }
