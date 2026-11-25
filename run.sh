@@ -11,13 +11,13 @@ DFLAGS="--mtriple=riscv32-unknown-none-elf --mattr=+m,+c,+relax --mabi=ilp32 -O2
 
 # シェルをビルド
 $LDC $DFLAGS -c -od=build/shell shell.d user.d common.d
-$LD -T user.ld -Map=shell.Map --gc-sections -o shell.elf \
+$LD -T user.ld -Map=shell.Map --gc-sections --discard-locals -o shell.elf \
     build/shell/shell.o build/shell/user.o build/shell/common.o
 $OBJCOPY -O binary --set-section-flags .bss=alloc,contents shell.elf shell.bin
 
 # カーネルをビルド
 $LDC $DFLAGS -J. -c -od=build/kernel kernel.d common.d
-$LD -T kernel.ld -Map=kernel.Map --gc-sections -o kernel.elf \
+$LD -T kernel.ld -Map=kernel.Map --gc-sections --discard-locals -o kernel.elf \
     build/kernel/kernel.o build/kernel/common.o
 
 (cd disk && tar cf ../disk.tar --format=ustar *.txt)
