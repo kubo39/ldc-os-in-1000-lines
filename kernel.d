@@ -114,7 +114,7 @@ void writeCsr(string reg)(void* value)
 
 enum SCAUSE_ECALL = 8;
 
-void handleTrap(TrapFrame* f)
+void handleTrap(ref TrapFrame f)
 {
     uint scause = readCsr!("scause", uint)();
     uint stval = readCsr!("stval", uint)();
@@ -139,7 +139,7 @@ void handleTrap(TrapFrame* f)
 
 static assert(SysNo.max - SysNo.min + 1 == __traits(allMembers, SysNo).length);
 
-void handleSyscall(TrapFrame* f)
+void handleSyscall(ref TrapFrame f)
 {
     if (f.a3 < SysNo.min || f.a3 > SysNo.max)
     {
